@@ -2256,44 +2256,49 @@ class sessionClass {
 
         var level_ids = LEVELS['All']
         var team_ids = ''
-        if ( includeLevels.length > 0 ) {
-          if ( (includeLevels.length > 1) || !includeLevels.includes('ALL') ) {
-            let level_list = []
-            for (let i = 0; i < includeLevels.length; i++) {
-              if ( LEVELS[includeLevels[i]] ) {
-                level_list.push(LEVELS[includeLevels[i]])
-              }
+
+        // Level filter (sportId list); empty/'ALL' means no level filter.
+        if ( includeLevels.length > 0 && ((includeLevels.length > 1) || !includeLevels.includes('ALL')) ) {
+          let level_list = []
+          for (let i = 0; i < includeLevels.length; i++) {
+            if ( LEVELS[includeLevels[i]] ) {
+              level_list.push(LEVELS[includeLevels[i]])
             }
-            level_ids = level_list.toString()
           }
-        } else {
-          if ( includeOrgs.length > 0 ) {
-            team_ids = this.getTeamIds()
-            for (let i = 0; i < includeOrgs.length; i++) {
-              if ( AFFILIATE_TEAM_IDS[includeOrgs[i]] ) {
-                team_ids += ',' + AFFILIATE_TEAM_IDS[includeOrgs[i]]
-              }
+          if ( level_list.length > 0 ) level_ids = level_list.toString()
+        }
+
+        // Team filter (teamId list). Apply alongside level filter; the API
+        // intersects both, so includeLevels=MLB + includeTeams=<abbr> yields
+        // that team's MLB games only (no minor league affiliates).
+        let mlbOnly = (level_ids == LEVELS['MLB'])
+        if ( includeOrgs.length > 0 ) {
+          team_ids = this.getTeamIds()
+          for (let i = 0; i < includeOrgs.length; i++) {
+            if ( !mlbOnly && AFFILIATE_TEAM_IDS[includeOrgs[i]] ) {
+              team_ids += ',' + AFFILIATE_TEAM_IDS[includeOrgs[i]]
             }
-          } else if ( includeTeams.length > 0 ) {
-            team_ids = this.getTeamIds()
-            for (let i=0; i<includeTeams.length; i++) {
-              if ( (includeTeams[i] != '') && AFFILIATE_TEAM_IDS[includeTeams[i]] ) {
-                team_ids += ',' + AFFILIATE_TEAM_IDS[includeTeams[i]]
-              }
+          }
+        } else if ( includeTeams.length > 0 ) {
+          team_ids = this.getTeamIds()
+          for (let i=0; i<includeTeams.length; i++) {
+            if ( !mlbOnly && (includeTeams[i] != '') && AFFILIATE_TEAM_IDS[includeTeams[i]] ) {
+              team_ids += ',' + AFFILIATE_TEAM_IDS[includeTeams[i]]
             }
-            if ( includeTeams.includes('WINTER') ) {
-              team_ids += ',' + this.getWinterTeamIds()
+          }
+          if ( !mlbOnly && includeTeams.includes('WINTER') ) {
+            team_ids += ',' + this.getWinterTeamIds()
+          }
+        } else if ( includeLevels.length == 0 ) {
+          // No explicit level or team filter: default to fav_teams expansion (with affiliates) plus winter leagues.
+          team_ids = this.getTeamIds()
+          for (let i=0; i<this.credentials.fav_teams.length; i++) {
+            if ( (this.credentials.fav_teams[i] != '') && AFFILIATE_TEAM_IDS[this.credentials.fav_teams[i]] ) {
+              team_ids += ',' + AFFILIATE_TEAM_IDS[this.credentials.fav_teams[i]]
             }
-          } else {
-            team_ids = this.getTeamIds()
-            for (let i=0; i<this.credentials.fav_teams.length; i++) {
-              if ( (this.credentials.fav_teams[i] != '') && AFFILIATE_TEAM_IDS[this.credentials.fav_teams[i]] ) {
-                team_ids += ',' + AFFILIATE_TEAM_IDS[this.credentials.fav_teams[i]]
-              }
-            }
-            if ( (excludeTeams.length == 0) || !excludeTeams.includes('WINTER') ) {
-              team_ids += ',' + this.getWinterTeamIds()
-            }
+          }
+          if ( (excludeTeams.length == 0) || !excludeTeams.includes('WINTER') ) {
+            team_ids += ',' + this.getWinterTeamIds()
           }
         }
 
