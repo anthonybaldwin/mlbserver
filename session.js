@@ -5471,10 +5471,12 @@ class sessionClass {
   async generate_ics_event(prefix, start, stop, title, description, location, altLocation='') {
     let ics_start = this.date_to_ics_format(start)
     // Caller passes altLocation when the request specified &altUrl=<host[:port]>.
-    // We prepend it to DESCRIPTION (literal \n inside the value, which calendar
+    // We append it to DESCRIPTION (literal \n inside the value, which calendar
     // clients render as a line break) so the event keeps a single LOCATION
     // (primary URL) while still surfacing the alternate URL for click-through.
-    let desc = altLocation ? ('Alternate: ' + altLocation + '\\n\\n' + description) : description
+    // Placed below the upstream description so broadcast/pitcher metadata
+    // stays at the top of the event details.
+    let desc = altLocation ? (description + '\\n\\nAlternate: ' + altLocation) : description
     return "\n" + 'BEGIN:VEVENT' + "\n" + 'UID:' + title.replace(/\W/g, '') + '@' + ics_start.replace(/\W/g, '') + "\n" + 'DTSTAMP:' + this.date_to_ics_format(new Date()) + "\n" + 'SUMMARY:' + prefix + ' ' + title + "\n" + 'DTSTART:' + ics_start + "\n" + 'DTEND:' + this.date_to_ics_format(stop) + "\n" + 'DESCRIPTION:' + desc + "\n" + 'LOCATION:' + location + "\n" + 'BEGIN:VALARM' + "\n" + 'ACTION:DISPLAY' + "\n" + 'DESCRIPTION:Reminder' + "\n" + 'TRIGGER:-PT0M' + "\n" + 'END:VALARM' + "\n" + 'END:VEVENT'
   }
 
