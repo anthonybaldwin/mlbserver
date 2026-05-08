@@ -2218,7 +2218,7 @@ class sessionClass {
   }
 
   // get TV data (channels or guide)
-  async getTVData(dataType, mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles='false', audio_track=false, offAir='false', resolution='best', pipe='false', startingChannelNumber=1) {
+  async getTVData(dataType, mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles='false', audio_track=false, offAir='false', resolution='best', pipe='false', startingChannelNumber=1, altServer='') {
     try {
       this.debuglog('getTVData for ' + dataType)
 
@@ -2238,6 +2238,13 @@ class sessionClass {
       var channels = {}
       var calendar = ""
       var programs = ""
+
+      // altLocation builder: when the caller provided &altUrl=, swap our
+      // server prefix in any per-event LOCATION value to produce the
+      // alternate URL that gets prepended to the ICS DESCRIPTION. Returns ''
+      // when no alt is configured (so generate_ics_event keeps the original
+      // description untouched).
+      const buildAltLoc = (loc) => (altServer && altServer !== server) ? loc.replace(server, altServer) : ''
 
       try {
         this.debuglog('getTVData processing')
@@ -2472,7 +2479,7 @@ class sessionClass {
                       let prefix = 'Watch'
                       let location = server + '/embed.html?team=' + encodeURIComponent(team) + '&mediaType=' + streamMediaType
                       if ( this.protection.content_protect ) location += '&content_protect=' + this.protection.content_protect
-                      calendar += await this.generate_ics_event(prefix, calendar_start, calendar_stop, subtitle, description, location)
+                      calendar += await this.generate_ics_event(prefix, calendar_start, calendar_stop, subtitle, description, location, buildAltLoc(location))
                       
                       // Off Air if necessary
                       let off_air_event = await this.generate_off_air_event(offAir, channelid, cache_data.dates[i].date, channels[channelid].stop, cache_data.dates[i].games[j].gameDate, cache_data.dates[i].games[j].teams['away'].team.shortName + ' at ' + cache_data.dates[i].games[j].teams['home'].team.shortName)
@@ -2725,7 +2732,7 @@ class sessionClass {
                             }
                             if ( includeBlackouts == 'true' ) location += '&includeBlackouts=' + includeBlackouts
                             if ( this.protection.content_protect ) location += '&content_protect=' + this.protection.content_protect
-                            calendar += await this.generate_ics_event(prefix, calendar_start, calendar_stop, subtitle, description, location)
+                            calendar += await this.generate_ics_event(prefix, calendar_start, calendar_stop, subtitle, description, location, buildAltLoc(location))
 
                             // MLB guide XML
                             programs += await this.generate_xml_program(channelid, start, stop, title, description, icon, this.convertDateToAirDate(new Date(cache_data.dates[i].games[j].gameDate)), subtitle, seriesId, cache_data.dates[i].games[j].gamePk, away_team, home_team)
@@ -2943,7 +2950,7 @@ class sessionClass {
                     let prefix = 'Watch'
                     let location = server + '/embed.html?event=biginning&mediaType=Video&resolution=' + resolution
                     if ( this.protection.content_protect ) location += '&content_protect=' + this.protection.content_protect
-                    calendar += await this.generate_ics_event(prefix, new Date(this.cache.bigInningSchedule[gameDate][j].start), new Date(this.cache.bigInningSchedule[gameDate][j].end), title, description, location)
+                    calendar += await this.generate_ics_event(prefix, new Date(this.cache.bigInningSchedule[gameDate][j].start), new Date(this.cache.bigInningSchedule[gameDate][j].end), title, description, location, buildAltLoc(location))
                   
                     // Off Air if necessary
                     let off_air_event = await this.generate_off_air_event(offAir, channelid, gameDate, channels[channelid].stop, this.cache.bigInningSchedule[gameDate][j].start, title)
@@ -3003,7 +3010,7 @@ class sessionClass {
                     let prefix = 'Watch'
                     let location = server + '/embed.html?src=' + encodeURIComponent(stream)
                     if ( this.protection.content_protect ) location += '&content_protect=' + this.protection.content_protect
-                    calendar += await this.generate_ics_event(prefix, new Date(cache_data.dates[i].games[gameIndexes.firstGameIndex].gameDate), gameDate, title, description, location)
+                    calendar += await this.generate_ics_event(prefix, new Date(cache_data.dates[i].games[gameIndexes.firstGameIndex].gameDate), gameDate, title, description, location, buildAltLoc(location))
                     
                     // Off Air if necessary
                     let off_air_event = await this.generate_off_air_event(offAir, channelid, cache_data.dates[i].date, channels[channelid].stop, cache_data.dates[i].games[gameIndexes.firstGameIndex].gameDate, title)
@@ -3057,7 +3064,7 @@ class sessionClass {
                     let prefix = 'Watch'
                     let location = server + '/embed.html?src=' + encodeURIComponent(stream)
                     if ( this.protection.content_protect ) location += '&content_protect=' + this.protection.content_protect
-                    calendar += await this.generate_ics_event(prefix, new Date(cache_data.dates[i].games[gameIndexes.firstGameIndex].gameDate), gameDate, title, description, location)
+                    calendar += await this.generate_ics_event(prefix, new Date(cache_data.dates[i].games[gameIndexes.firstGameIndex].gameDate), gameDate, title, description, location, buildAltLoc(location))
                     
                     // Off Air if necessary
                     let off_air_event = await this.generate_off_air_event(offAir, channelid, cache_data.dates[i].date, channels[channelid].stop, cache_data.dates[i].games[gameIndexes.firstGameIndex].gameDate, title)
@@ -3110,7 +3117,7 @@ class sessionClass {
                     // Multview calendar ICS
                     let prefix = 'Watch'
                     let location = stream.replace('/stream.m3u8?src=', '/embed.html?msrc=')
-                    calendar += await this.generate_ics_event(prefix, new Date(cache_data.dates[i].games[gameIndexes.firstGameIndex].gameDate), gameDate, title, description, location)
+                    calendar += await this.generate_ics_event(prefix, new Date(cache_data.dates[i].games[gameIndexes.firstGameIndex].gameDate), gameDate, title, description, location, buildAltLoc(location))
                     
                     // Off Air if necessary
                     let off_air_event = await this.generate_off_air_event(offAir, channelid, cache_data.dates[i].date, channels[channelid].stop, cache_data.dates[i].games[gameIndexes.firstGameIndex].gameDate, title)
@@ -5461,9 +5468,14 @@ class sessionClass {
 (aDate.getUTCDate()<10? "0" + aDate.getUTCDate().toString():aDate.getUTCDate().toString()) + 'T' + (aDate.getUTCHours()<10? "0" + aDate.getUTCHours().toString():aDate.getUTCHours().toString()) + (aDate.getUTCMinutes()<10? "0" + aDate.getUTCMinutes().toString():aDate.getUTCMinutes().toString()) + '00Z';
   }
 
-  async generate_ics_event(prefix, start, stop, title, description, location) {
+  async generate_ics_event(prefix, start, stop, title, description, location, altLocation='') {
     let ics_start = this.date_to_ics_format(start)
-    return "\n" + 'BEGIN:VEVENT' + "\n" + 'UID:' + title.replace(/\W/g, '') + '@' + ics_start.replace(/\W/g, '') + "\n" + 'DTSTAMP:' + this.date_to_ics_format(new Date()) + "\n" + 'SUMMARY:' + prefix + ' ' + title + "\n" + 'DTSTART:' + ics_start + "\n" + 'DTEND:' + this.date_to_ics_format(stop) + "\n" + 'DESCRIPTION:' + description + "\n" + 'LOCATION:' + location + "\n" + 'BEGIN:VALARM' + "\n" + 'ACTION:DISPLAY' + "\n" + 'DESCRIPTION:Reminder' + "\n" + 'TRIGGER:-PT0M' + "\n" + 'END:VALARM' + "\n" + 'END:VEVENT'
+    // Caller passes altLocation when the request specified &altUrl=<host[:port]>.
+    // We prepend it to DESCRIPTION (literal \n inside the value, which calendar
+    // clients render as a line break) so the event keeps a single LOCATION
+    // (primary URL) while still surfacing the alternate URL for click-through.
+    let desc = altLocation ? ('Alternate: ' + altLocation + '\\n\\n' + description) : description
+    return "\n" + 'BEGIN:VEVENT' + "\n" + 'UID:' + title.replace(/\W/g, '') + '@' + ics_start.replace(/\W/g, '') + "\n" + 'DTSTAMP:' + this.date_to_ics_format(new Date()) + "\n" + 'SUMMARY:' + prefix + ' ' + title + "\n" + 'DTSTART:' + ics_start + "\n" + 'DTEND:' + this.date_to_ics_format(stop) + "\n" + 'DESCRIPTION:' + desc + "\n" + 'LOCATION:' + location + "\n" + 'BEGIN:VALARM' + "\n" + 'ACTION:DISPLAY' + "\n" + 'DESCRIPTION:Reminder' + "\n" + 'TRIGGER:-PT0M' + "\n" + 'END:VALARM' + "\n" + 'END:VEVENT'
   }
 
   async generate_xml_program(channelid, start, stop, title, description, icon, date, subtitle=false, teamId=false, gamePk=false, away_team=false, home_team=false) {
