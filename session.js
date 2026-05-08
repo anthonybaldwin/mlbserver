@@ -2881,32 +2881,56 @@ class sessionClass {
                               }
                               prefix += ' to'
                             }
-                            let location = server + '/embed.html?team=' + encodeURIComponent(team) + '&mediaType=' + streamMediaType
+                            // Per-broadcast mediaId pins the URL to *this specific game's
+                            // feed* — the previous team-keyed shape (`?team=KC&mediaType=Video`)
+                            // resolved to "whatever's current/next for KC" and pointed at
+                            // nothing useful for past games on the calendar. The home-page
+                            // list URL (`/?level=mlb&org=KC`) is a different surface for
+                            // browsing and isn't what we want here.
+                            //
+                            // Fall back to the team-keyed form only if mediaId is missing
+                            // (rare — typically a not-yet-scheduled / TBD broadcast).
+                            let streamUrl
+                            if ( broadcast && broadcast.mediaId ) {
+                              streamUrl = server + '/embed.html?mediaId=' + encodeURIComponent(broadcast.mediaId)
+                            } else {
+                              streamUrl = server + '/embed.html?team=' + encodeURIComponent(team) + '&mediaType=' + streamMediaType
+                            }
                             if ( streamMediaType == 'Video' ) {
-                              location += '&resolution=' + resolution
+                              streamUrl += '&resolution=' + resolution
                             }
                             if ( audio_track ) {
-                              location += '&audio_track=' + audio_track
+                              streamUrl += '&audio_track=' + audio_track
                             }
-                            if ( includeBlackouts == 'true' ) location += '&includeBlackouts=' + includeBlackouts
-                            if ( this.protection.content_protect ) location += '&content_protect=' + this.protection.content_protect
+                            if ( includeBlackouts == 'true' ) streamUrl += '&includeBlackouts=' + includeBlackouts
+                            if ( this.protection.content_protect ) streamUrl += '&content_protect=' + this.protection.content_protect
+
+                            // Venue (stadium name) is the human-meaningful LOCATION field.
+                            // Falls back to streamUrl when venue is unknown so the field is
+                            // never empty and clients keep a clickable target.
+                            const venue = (cache_data.dates[i].games[j].venue && cache_data.dates[i].games[j].venue.name) || ''
+                            const locationField = venue || streamUrl
+
                             // Stable per-game UID (gamePk) so SEQUENCE bumps land on the same
                             // event as the game progresses. SEQUENCE comes from a persisted
                             // hash-of-visible-state map: any user-visible change (status,
-                            // DTSTART, score, badge) flips the hash and increments the saved
-                            // sequence by 1. Hash mirrors what the calendar event will display
-                            // so we don't bump on internal-only field changes.
+                            // DTSTART, score, venue, streamUrl, badge) flips the hash and
+                            // increments the saved sequence by 1. Hash mirrors what the
+                            // calendar event will display so we don't bump on internal-only
+                            // field changes.
                             const gamePk = cache_data.dates[i].games[j].gamePk
                             const uidOverride = gamePk ? ('mlb-' + gamePk + '@mlbserver') : ''
                             const stateHash = JSON.stringify({
                               s: (cache_data.dates[i].games[j].status && cache_data.dates[i].games[j].status.detailedState) || '',
                               t: subtitle,
                               d: calendar_start instanceof Date ? calendar_start.toISOString() : String(calendar_start),
-                              e: calendar_stop instanceof Date ? calendar_stop.toISOString() : String(calendar_stop)
+                              e: calendar_stop instanceof Date ? calendar_stop.toISOString() : String(calendar_stop),
+                              v: venue,
+                              u: streamUrl
                             })
                             const seq = gamePk ? bumpSequence(gamePk, stateHash) : 0
                             if ( gamePk ) seqStateDirty = true
-                            calendar += await this.generate_ics_event(prefix, calendar_start, calendar_stop, subtitle, description, location, buildAltLoc(location), seq, uidOverride)
+                            calendar += await this.generate_ics_event(prefix, calendar_start, calendar_stop, subtitle, description, locationField, buildAltLoc(streamUrl), seq, uidOverride, streamUrl)
 
                             // MLB guide XML
                             programs += await this.generate_xml_program(channelid, start, stop, title, description, icon, this.convertDateToAirDate(new Date(cache_data.dates[i].games[j].gameDate)), subtitle, seriesId, cache_data.dates[i].games[j].gamePk, away_team, home_team)
@@ -5653,15 +5677,28 @@ class sessionClass {
 (aDate.getUTCDate()<10? "0" + aDate.getUTCDate().toString():aDate.getUTCDate().toString()) + 'T' + (aDate.getUTCHours()<10? "0" + aDate.getUTCHours().toString():aDate.getUTCHours().toString()) + (aDate.getUTCMinutes()<10? "0" + aDate.getUTCMinutes().toString():aDate.getUTCMinutes().toString()) + '00Z';
   }
 
-  async generate_ics_event(prefix, start, stop, title, description, location, altLocation='', sequence=0, uidOverride='') {
+  async generate_ics_event(prefix, start, stop, title, description, location, altLocation='', sequence=0, uidOverride='', streamUrl='') {
     let ics_start = this.date_to_ics_format(start)
-    // Caller passes altLocation when the request specified &altUrl=<host[:port]>.
-    // We append it to DESCRIPTION (literal \n inside the value, which calendar
-    // clients render as a line break) so the event keeps a single LOCATION
-    // (primary URL) while still surfacing the alternate URL for click-through.
-    // Placed below the upstream description so broadcast/pitcher metadata
-    // stays at the top of the event details.
-    let desc = altLocation ? (description + '\\n\\nAlternate: ' + altLocation) : description
+    // DESCRIPTION layout (literal \n is the ICS escape for a line break,
+    // which compliant calendar clients render as a paragraph separator):
+    //   <upstream description — broadcast/pitchers/etc.>
+    //   <blank line>
+    //   Watch: <streamUrl>     ← only when caller put a venue in `location`
+    //   <blank line>           ← so the URL would otherwise be invisible
+    //   Alternate: <altLocation>
+    //
+    // When `streamUrl` is empty (legacy callers) we emit only the upstream
+    // description + an optional alternate URL, preserving prior output.
+    // The streamUrl===location guard avoids a duplicate "Watch:" line when
+    // a caller without a known venue uses streamUrl as the LOCATION field.
+    let descParts = [description]
+    if ( streamUrl && streamUrl !== location ) {
+      descParts.push('Watch: ' + streamUrl)
+    }
+    if ( altLocation ) {
+      descParts.push('Alternate: ' + altLocation)
+    }
+    let desc = descParts.join('\\n\\n')
     // Empty prefix (titleFormat=compact suppresses "Watch") — drop the
     // separating space so SUMMARY isn't left with leading whitespace.
     let summary = prefix ? (prefix + ' ' + title) : title
