@@ -2218,7 +2218,7 @@ class sessionClass {
   }
 
   // get TV data (channels or guide)
-  async getTVData(dataType, mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles='false', audio_track=false, offAir='false', resolution='best', pipe='false', startingChannelNumber=1, altServer='') {
+  async getTVData(dataType, mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles='false', audio_track=false, offAir='false', resolution='best', pipe='false', startingChannelNumber=1, altServer='', titleFormat='default', showScores='none') {
     try {
       this.debuglog('getTVData for ' + dataType)
 
@@ -2245,6 +2245,23 @@ class sessionClass {
       // when no alt is configured (so generate_ics_event keeps the original
       // description untouched).
       const buildAltLoc = (loc) => (altServer && altServer !== server) ? loc.replace(server, altServer) : ''
+
+      // Game-state → SEQUENCE mapping. Google Calendar's documented rule:
+      // an event with the same UID is only updated when the new SEQUENCE
+      // exceeds the previous one. Deterministically encoding lifecycle
+      // state (scheduled → live → final) into SEQUENCE means we don't have
+      // to persist any per-game state — each refresh recomputes the same
+      // number for the same game state, and bumps it monotonically as the
+      // game progresses.
+      const sequenceForGame = (status) => {
+        if ( !status ) return 0
+        const s = status.detailedState || ''
+        if ( s === 'Final' || s === 'Game Over' || s === 'Completed Early' ) return 2
+        const abs = status.abstractGameState || ''
+        if ( abs === 'Live' || s === 'In Progress' || s === 'Manager challenge' ) return 1
+        return 0
+      }
+      const isFinalStatus = (status) => sequenceForGame(status) === 2
 
       try {
         this.debuglog('getTVData processing')
@@ -2625,7 +2642,25 @@ class sessionClass {
 
                             let away_team = cache_data.dates[i].games[j].teams['away'].team.teamName
                             let home_team = cache_data.dates[i].games[j].teams['home'].team.teamName
-                            let subtitle = away_team + ' at ' + home_team
+                            // titleFormat=compact swaps "Tigers at Royals" -> "Tigers @ Royals" and
+                            // drops the "Watch" prefix (set later) so subscribed events read like a
+                            // standard sport schedule. showScores=final injects the final score
+                            // ("Tigers (1) @ Royals (3)") once status hits Final/Game Over.
+                            let subtitle
+                            if ( titleFormat === 'compact' ) {
+                              subtitle = away_team + ' @ ' + home_team
+                            } else {
+                              subtitle = away_team + ' at ' + home_team
+                            }
+                            if ( showScores === 'final' && isFinalStatus(cache_data.dates[i].games[j].status) ) {
+                              const ls = cache_data.dates[i].games[j].linescore
+                              const ar = ls && ls.teams && ls.teams.away ? ls.teams.away.runs : undefined
+                              const hr = ls && ls.teams && ls.teams.home ? ls.teams.home.runs : undefined
+                              if ( typeof ar === 'number' && typeof hr === 'number' ) {
+                                const sep = (titleFormat === 'compact') ? ' @ ' : ' at '
+                                subtitle = away_team + ' (' + ar + ')' + sep + home_team + ' (' + hr + ')'
+                              }
+                            }
 
                             if (includeTeamsInTitles != 'false') {
                               if ( includeTeamsInTitles == 'channels' ) {
@@ -2715,8 +2750,11 @@ class sessionClass {
                             let calendar_stop = stopDate
 
                             // MLB calendar ICS
-                            let prefix = 'Watch'
-                            if ( mediaType == 'Audio' ) {
+                            // titleFormat=compact suppresses "Watch"/"Listen" prefixes so the SUMMARY
+                            // is the team line alone (e.g., "Tigers @ Royals"). Default keeps the
+                            // upstream prefix.
+                            let prefix = (titleFormat === 'compact') ? '' : 'Watch'
+                            if ( titleFormat !== 'compact' && mediaType == 'Audio' ) {
                               prefix = 'Listen'
                               if ( language == 'es' ) {
                                 prefix += ' (in Spanish)'
@@ -2732,7 +2770,13 @@ class sessionClass {
                             }
                             if ( includeBlackouts == 'true' ) location += '&includeBlackouts=' + includeBlackouts
                             if ( this.protection.content_protect ) location += '&content_protect=' + this.protection.content_protect
-                            calendar += await this.generate_ics_event(prefix, calendar_start, calendar_stop, subtitle, description, location, buildAltLoc(location))
+                            // Stable per-game UID (gamePk) so SEQUENCE bumps land on the same
+                            // event as the game progresses. SEQUENCE is derived deterministically
+                            // from status above (scheduled=0, live=1, final=2).
+                            const gamePk = cache_data.dates[i].games[j].gamePk
+                            const uidOverride = gamePk ? ('mlb-' + gamePk + '@mlbserver') : ''
+                            const seq = sequenceForGame(cache_data.dates[i].games[j].status)
+                            calendar += await this.generate_ics_event(prefix, calendar_start, calendar_stop, subtitle, description, location, buildAltLoc(location), seq, uidOverride)
 
                             // MLB guide XML
                             programs += await this.generate_xml_program(channelid, start, stop, title, description, icon, this.convertDateToAirDate(new Date(cache_data.dates[i].games[j].gameDate)), subtitle, seriesId, cache_data.dates[i].games[j].gamePk, away_team, home_team)
@@ -5468,7 +5512,7 @@ class sessionClass {
 (aDate.getUTCDate()<10? "0" + aDate.getUTCDate().toString():aDate.getUTCDate().toString()) + 'T' + (aDate.getUTCHours()<10? "0" + aDate.getUTCHours().toString():aDate.getUTCHours().toString()) + (aDate.getUTCMinutes()<10? "0" + aDate.getUTCMinutes().toString():aDate.getUTCMinutes().toString()) + '00Z';
   }
 
-  async generate_ics_event(prefix, start, stop, title, description, location, altLocation='') {
+  async generate_ics_event(prefix, start, stop, title, description, location, altLocation='', sequence=0, uidOverride='') {
     let ics_start = this.date_to_ics_format(start)
     // Caller passes altLocation when the request specified &altUrl=<host[:port]>.
     // We append it to DESCRIPTION (literal \n inside the value, which calendar
@@ -5477,7 +5521,18 @@ class sessionClass {
     // Placed below the upstream description so broadcast/pitcher metadata
     // stays at the top of the event details.
     let desc = altLocation ? (description + '\\n\\nAlternate: ' + altLocation) : description
-    return "\n" + 'BEGIN:VEVENT' + "\n" + 'UID:' + title.replace(/\W/g, '') + '@' + ics_start.replace(/\W/g, '') + "\n" + 'DTSTAMP:' + this.date_to_ics_format(new Date()) + "\n" + 'SUMMARY:' + prefix + ' ' + title + "\n" + 'DTSTART:' + ics_start + "\n" + 'DTEND:' + this.date_to_ics_format(stop) + "\n" + 'DESCRIPTION:' + desc + "\n" + 'LOCATION:' + location + "\n" + 'BEGIN:VALARM' + "\n" + 'ACTION:DISPLAY' + "\n" + 'DESCRIPTION:Reminder' + "\n" + 'TRIGGER:-PT0M' + "\n" + 'END:VALARM' + "\n" + 'END:VEVENT'
+    // Empty prefix (titleFormat=compact suppresses "Watch") — drop the
+    // separating space so SUMMARY isn't left with leading whitespace.
+    let summary = prefix ? (prefix + ' ' + title) : title
+    // uidOverride lets MLB callers anchor the event on game.gamePk so
+    // SEQUENCE-driven updates (score injection at Final, etc.) land on the
+    // same calendar entry. Falls back to the legacy title-based UID for any
+    // path that doesn't supply one.
+    let uid = uidOverride || (title.replace(/\W/g, '') + '@' + ics_start.replace(/\W/g, ''))
+    // SEQUENCE is always emitted — RFC 5545 §3.8.7.4 defaults it to 0 when
+    // absent, so emitting `SEQUENCE:0` is a no-op for default subscribers
+    // and lets MLB callers signal lifecycle bumps without a schema split.
+    return "\n" + 'BEGIN:VEVENT' + "\n" + 'UID:' + uid + "\n" + 'DTSTAMP:' + this.date_to_ics_format(new Date()) + "\n" + 'SEQUENCE:' + sequence + "\n" + 'SUMMARY:' + summary + "\n" + 'DTSTART:' + ics_start + "\n" + 'DTEND:' + this.date_to_ics_format(stop) + "\n" + 'DESCRIPTION:' + desc + "\n" + 'LOCATION:' + location + "\n" + 'BEGIN:VALARM' + "\n" + 'ACTION:DISPLAY' + "\n" + 'DESCRIPTION:Reminder' + "\n" + 'TRIGGER:-PT0M' + "\n" + 'END:VALARM' + "\n" + 'END:VEVENT'
   }
 
   async generate_xml_program(channelid, start, stop, title, description, icon, date, subtitle=false, teamId=false, gamePk=false, away_team=false, home_team=false) {
