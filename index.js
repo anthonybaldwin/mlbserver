@@ -3248,7 +3248,16 @@ app.get('/calendar.ics', async function(req, res) {
       backFillSeason = req.query.backFillSeason.toLowerCase()
     }
 
-    var body = await session.getTVData('calendar', mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles, audio_track, 'false', 'best', 'false', 1, altServer, titleFormat, showScores, backFillSeason)
+    // Optional &skip=<value>: passes a stream-pipeline skip option through
+    // to each per-event embed URL (e.g. `commercials`, `pitches`) so the
+    // calendar's click-through matches what the user would launch from the
+    // mlbserver homepage with skipping enabled.
+    let skip = ''
+    if ( req.query.skip ) {
+      skip = req.query.skip
+    }
+
+    var body = await session.getTVData('calendar', mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles, audio_track, 'false', 'best', 'false', 1, altServer, titleFormat, showScores, backFillSeason, skip)
 
     res.writeHead(200, {'Content-Type': 'text/calendar'})
     res.end(body)
