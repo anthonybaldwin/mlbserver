@@ -3207,7 +3207,21 @@ app.get('/calendar.ics', async function(req, res) {
 
     let server = (req.headers['x-forwarded-proto'] ? req.headers['x-forwarded-proto'] : 'http') + '://' + req.headers.host + http_root
 
-    var body = await session.getTVData('calendar', mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles, audio_track)
+    // Optional &altUrl=<host[:port] | full-url-prefix>: if set, each VEVENT's
+    // DESCRIPTION is prepended with an "Alternate: <url>" line built by
+    // swapping `server` for `altServer` in the per-event LOCATION. Lets a
+    // single subscription expose two reachable URLs (e.g. raspy.local on the
+    // LAN + the Tailscale FQDN) without duplicating events.
+    let altServer = ''
+    if ( req.query.altUrl ) {
+      let alt = decodeURIComponent(req.query.altUrl).trim()
+      if ( !alt.match(/^https?:\/\//i) ) {
+        alt = (req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http') + '://' + alt
+      }
+      altServer = alt.replace(/\/+$/, '') + http_root
+    }
+
+    var body = await session.getTVData('calendar', mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles, audio_track, 'false', 'best', 'false', 1, altServer)
 
     res.writeHead(200, {'Content-Type': 'text/calendar'})
     res.end(body)
