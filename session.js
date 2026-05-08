@@ -2284,7 +2284,7 @@ class sessionClass {
   }
 
   // get TV data (channels or guide)
-  async getTVData(dataType, mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles='false', audio_track=false, offAir='false', resolution='best', pipe='false', startingChannelNumber=1, altServer='', titleFormat='default', showScores='none', backFillSeason='false') {
+  async getTVData(dataType, mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles='false', audio_track=false, offAir='false', resolution='best', pipe='false', startingChannelNumber=1, altServer='', titleFormat='default', showScores='none', backFillSeason='false', skip='') {
     try {
       this.debuglog('getTVData for ' + dataType)
 
@@ -2893,6 +2893,13 @@ class sessionClass {
                             let streamUrl
                             if ( broadcast && broadcast.mediaId ) {
                               streamUrl = server + '/embed.html?mediaId=' + encodeURIComponent(broadcast.mediaId)
+                              // gamePk is redundant when mediaId is set (embed.html only
+                              // consults gamePk when mediaId is missing) but we include it
+                              // for parity with mlbserver's own homepage links and as a
+                              // fallback if MLB ever rotates a mediaId on us.
+                              if ( cache_data.dates[i].games[j].gamePk ) {
+                                streamUrl += '&gamePk=' + encodeURIComponent(cache_data.dates[i].games[j].gamePk)
+                              }
                             } else {
                               streamUrl = server + '/embed.html?team=' + encodeURIComponent(team) + '&mediaType=' + streamMediaType
                             }
@@ -2902,6 +2909,10 @@ class sessionClass {
                             if ( audio_track ) {
                               streamUrl += '&audio_track=' + audio_track
                             }
+                            // skip propagates through to the embed/stream pipeline so the
+                            // calendar URL matches what the user would click from the
+                            // mlbserver homepage when commercials/etc. should be skipped.
+                            if ( skip ) streamUrl += '&skip=' + encodeURIComponent(skip)
                             if ( includeBlackouts == 'true' ) streamUrl += '&includeBlackouts=' + includeBlackouts
                             if ( this.protection.content_protect ) streamUrl += '&content_protect=' + this.protection.content_protect
 
