@@ -2458,10 +2458,14 @@ class sessionClass {
                         continue
                       }
                       let start = this.convertDateToXMLTV(gameDate)
-                      let calendar_start = gameDate
-                      let stopDate = gameDate
+                      // Clone gameDate before deriving stopDate — Date.setHours mutates
+                      // in place, and aliasing calendar_start/stopDate to the same
+                      // gameDate object would push DTSTART forward by gameHours and
+                      // collapse DTSTART/DTEND into a zero-duration event.
+                      let calendar_start = new Date(gameDate.getTime())
+                      let stopDate = new Date(gameDate.getTime())
                       stopDate.setHours(stopDate.getHours()+gameHours)
-                      let stop = this.convertDateToXMLTV(gameDate)
+                      let stop = this.convertDateToXMLTV(stopDate)
                       let calendar_stop = stopDate
 
                       // MILB calendar ICS
@@ -2692,8 +2696,13 @@ class sessionClass {
                               continue
                             }
                             let start = this.convertDateToXMLTV(gameDate)
-                            let calendar_start = gameDate
-                            let stopDate = gameDate
+                            // Clone gameDate before deriving stopDate — Date.setHours
+                            // mutates in place, and aliasing calendar_start/stopDate to
+                            // the same gameDate object would push DTSTART forward by
+                            // gameHours and collapse DTSTART/DTEND into a zero-duration
+                            // event.
+                            let calendar_start = new Date(gameDate.getTime())
+                            let stopDate = new Date(gameDate.getTime())
                             stopDate.setHours(stopDate.getHours()+gameHours)
                             let stop = this.convertDateToXMLTV(stopDate)
                             let calendar_stop = stopDate
