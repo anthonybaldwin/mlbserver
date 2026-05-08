@@ -3221,7 +3221,25 @@ app.get('/calendar.ics', async function(req, res) {
       altServer = alt.replace(/\/+$/, '') + http_root
     }
 
-    var body = await session.getTVData('calendar', mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles, audio_track, 'false', 'best', 'false', 1, altServer)
+    // Optional &titleFormat=compact: drop the "Watch"/"Listen" prefix and
+    // render team line as "Tigers @ Royals" instead of "Tigers at Royals".
+    // Default ('default') preserves upstream behavior.
+    let titleFormat = 'default'
+    if ( req.query.titleFormat ) {
+      titleFormat = req.query.titleFormat.toLowerCase()
+    }
+
+    // Optional &showScores=final: for MLB games whose status is Final/Game
+    // Over, inject the line score into the SUMMARY (e.g., "Tigers (1) @
+    // Royals (3)"). Combined with deterministic SEQUENCE bumps on the
+    // game's stable UID, Google Calendar updates the existing event to
+    // surface the score.
+    let showScores = 'none'
+    if ( req.query.showScores ) {
+      showScores = req.query.showScores.toLowerCase()
+    }
+
+    var body = await session.getTVData('calendar', mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles, audio_track, 'false', 'best', 'false', 1, altServer, titleFormat, showScores)
 
     res.writeHead(200, {'Content-Type': 'text/calendar'})
     res.end(body)
