@@ -3239,7 +3239,16 @@ app.get('/calendar.ics', async function(req, res) {
       showScores = req.query.showScores.toLowerCase()
     }
 
-    var body = await session.getTVData('calendar', mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles, audio_track, 'false', 'best', 'false', 1, altServer, titleFormat, showScores)
+    // Optional &backFillSeason=true: one-shot full-season fetch (current
+    // calendar year, monthly chunks with politeness delay). Intended for
+    // initial calendar-import seeding so subscribers get past games on
+    // first sync; the regular cron sticks with the 20-day window.
+    let backFillSeason = 'false'
+    if ( req.query.backFillSeason ) {
+      backFillSeason = req.query.backFillSeason.toLowerCase()
+    }
+
+    var body = await session.getTVData('calendar', mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles, audio_track, 'false', 'best', 'false', 1, altServer, titleFormat, showScores, backFillSeason)
 
     res.writeHead(200, {'Content-Type': 'text/calendar'})
     res.end(body)

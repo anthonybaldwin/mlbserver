@@ -2217,8 +2217,74 @@ class sessionClass {
     }
   }
 
+  // One-shot full-season schedule fetch for the &backFillSeason=true ICS
+  // path. Pulls the current calendar year in monthly chunks with a small
+  // delay between calls so we don't hammer statsapi.mlb.com — completes in
+  // ~5–15s per request and produces an unmerged but date-sorted cache_data
+  // structure compatible with the existing calendar pipeline.
+  //
+  // Not cached on disk: backFillSeason is intended for rare one-shot use
+  // (initial Google Calendar import seeding) rather than the regular cron,
+  // and skipping the cache layer keeps the path simple. If we ever want a
+  // hot path here, a separate cache_name like 'season-<year>.<level>.<team>'
+  // would be the plumbing site.
+  async getSeasonData(level_ids, team_ids) {
+    try {
+      this.debuglog('getSeasonData')
+      const year = new Date().getFullYear()
+      const merged = { dates: [] }
+      for ( let m = 0; m < 12; m++ ) {
+        // UTC year/month start..end-of-month, formatted YYYY-MM-DD per
+        // statsapi.mlb.com's date filter convention.
+        const start = new Date(Date.UTC(year, m, 1)).toISOString().substring(0, 10)
+        const end   = new Date(Date.UTC(year, m + 1, 0)).toISOString().substring(0, 10)
+        let data_url = 'https://statsapi.mlb.com/api/v1/schedule?sportId=' + level_ids
+        if ( team_ids != '' ) {
+          data_url += '&teamId=' + team_ids
+        }
+        data_url += '&startDate=' + start + '&endDate=' + end + '&hydrate=broadcasts(all),probablePitcher,linescore,team'
+        const reqObj = {
+          url: data_url,
+          headers: {
+            'User-agent': USER_AGENT,
+            'Origin': 'https://www.mlb.com',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Content-type': 'application/json'
+          },
+          gzip: true
+        }
+        try {
+          const response = await this.httpGet(reqObj, false)
+          if ( response && this.isValidJson(response) ) {
+            const data = JSON.parse(response)
+            if ( data.dates && data.dates.length ) {
+              merged.dates.push(...data.dates)
+            }
+          } else {
+            this.log('getSeasonData : invalid json from ' + start + '..' + end)
+          }
+        } catch ( e ) {
+          this.log('getSeasonData chunk error (' + start + '..' + end + ') : ' + e.message)
+        }
+        // Politeness delay between chunks (skip after last). 250ms keeps
+        // total wait < 3s for an empty response set + lets statsapi
+        // breathe; the actual chunk fetches dominate wall time anyway.
+        if ( m < 11 ) {
+          await new Promise(r => setTimeout(r, 250))
+        }
+      }
+      // Stable date-ascending order so getTVData's outer loop iterates
+      // chronologically — the upstream getWeeksData response is already
+      // sorted, so this matches the existing assumption.
+      merged.dates.sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+      return merged
+    } catch ( e ) {
+      this.log('getSeasonData error : ' + e.message)
+    }
+  }
+
   // get TV data (channels or guide)
-  async getTVData(dataType, mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles='false', audio_track=false, offAir='false', resolution='best', pipe='false', startingChannelNumber=1, altServer='', titleFormat='default', showScores='none') {
+  async getTVData(dataType, mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles='false', audio_track=false, offAir='false', resolution='best', pipe='false', startingChannelNumber=1, altServer='', titleFormat='default', showScores='none', backFillSeason='false') {
     try {
       this.debuglog('getTVData for ' + dataType)
 
@@ -2246,22 +2312,61 @@ class sessionClass {
       // description untouched).
       const buildAltLoc = (loc) => (altServer && altServer !== server) ? loc.replace(server, altServer) : ''
 
-      // Game-state → SEQUENCE mapping. Google Calendar's documented rule:
-      // an event with the same UID is only updated when the new SEQUENCE
-      // exceeds the previous one. Deterministically encoding lifecycle
-      // state (scheduled → live → final) into SEQUENCE means we don't have
-      // to persist any per-game state — each refresh recomputes the same
-      // number for the same game state, and bumps it monotonically as the
-      // game progresses.
-      const sequenceForGame = (status) => {
-        if ( !status ) return 0
+      // Status helpers used below for Final-game score injection and
+      // state-of-game badges in the SUMMARY.
+      const isFinalStatus = (status) => {
+        if ( !status ) return false
         const s = status.detailedState || ''
-        if ( s === 'Final' || s === 'Game Over' || s === 'Completed Early' ) return 2
-        const abs = status.abstractGameState || ''
-        if ( abs === 'Live' || s === 'In Progress' || s === 'Manager challenge' ) return 1
-        return 0
+        return s === 'Final' || s === 'Game Over' || s === 'Completed Early'
       }
-      const isFinalStatus = (status) => sequenceForGame(status) === 2
+      // Lifecycle-not-played terminal markers. Surfaced as a leading badge
+      // in SUMMARY ("[POSTPONED] Tigers @ Royals") so the user notices the
+      // change in their calendar at a glance. Includes both "Cancelled" and
+      // the British "Canceled" spelling because MLB's API uses both
+      // historically across feeds.
+      const stateBadge = (status) => {
+        const ds = (status && status.detailedState) || ''
+        switch ( ds ) {
+          case 'Postponed':                 return '[POSTPONED] '
+          case 'Cancelled': case 'Canceled': return '[CANCELLED] '
+          case 'Suspended':                 return '[SUSPENDED] '
+          case 'Forfeit':                   return '[FORFEIT] '
+          default:                          return ''
+        }
+      }
+
+      // Persistent per-gamePk SEQUENCE state. Google Calendar's documented
+      // rule (RFC 5545 §3.8.7.4): an event with the same UID is only
+      // re-rendered when SEQUENCE exceeds the previous value. We need a
+      // monotonic bump on *any* user-visible change — same-day time
+      // shifts, status transitions, score updates, postponements,
+      // resumptions. State-derived integer mappings can't catch all of
+      // those (a Scheduled→Scheduled DTSTART move keeps the same
+      // "lifecycle bucket"), so we hash the visible state and persist a
+      // small map of gamePk -> {hash, sequence}. Hash mismatch ⇒ bump.
+      const seqStateFile = path.join(this.CACHE_DIRECTORY, 'calendar-seq-state.json')
+      let seqState = {}
+      try {
+        if ( fs.existsSync(seqStateFile) ) seqState = JSON.parse(fs.readFileSync(seqStateFile, 'utf8'))
+      } catch ( e ) {
+        this.log('seq state read failed (resetting): ' + e.message)
+        seqState = {}
+      }
+      const bumpSequence = (gamePk, hash) => {
+        const key = String(gamePk)
+        const entry = seqState[key]
+        if ( !entry ) {
+          seqState[key] = { hash, sequence: 0 }
+          return 0
+        }
+        if ( entry.hash === hash ) return entry.sequence
+        entry.hash = hash
+        entry.sequence += 1
+        return entry.sequence
+      }
+      // Tracks whether any caller actually consulted bumpSequence so we
+      // only rewrite the state file when something changed.
+      let seqStateDirty = false
 
       try {
         this.debuglog('getTVData processing')
@@ -2326,7 +2431,14 @@ class sessionClass {
           }
         }
 
-        let cache_data = await this.getWeeksData(level_ids, team_ids)
+        // backFillSeason=true is a one-shot path: bypasses the 20-day cached
+        // window and pulls the entire current season's schedule for the
+        // requested level/team in monthly chunks. Intended for the rare
+        // initial-import flow ("seed Google Calendar with the whole season"),
+        // not regular cron. See getSeasonData() for politeness pacing.
+        let cache_data = (backFillSeason === 'true' || backFillSeason === true)
+          ? await this.getSeasonData(level_ids, team_ids)
+          : await this.getWeeksData(level_ids, team_ids)
         if (cache_data) {
           let today = this.liveDate()
           let prevDateIndex = {MLBTV:-1,Free:-1,Audio:-1}
@@ -2645,7 +2757,11 @@ class sessionClass {
                             // titleFormat=compact swaps "Tigers at Royals" -> "Tigers @ Royals" and
                             // drops the "Watch" prefix (set later) so subscribed events read like a
                             // standard sport schedule. showScores=final injects the final score
-                            // ("Tigers (1) @ Royals (3)") once status hits Final/Game Over.
+                            // ("Tigers (1) @ Royals (3)") once status hits Final/Game Over. State
+                            // badges ([POSTPONED] / [CANCELLED] / [SUSPENDED] / [FORFEIT]) get
+                            // prepended when the game is in a not-played terminal state — no
+                            // makeup-tracking logic needed; the make-up game arrives with its
+                            // own gamePk on its own date.
                             let subtitle
                             if ( titleFormat === 'compact' ) {
                               subtitle = away_team + ' @ ' + home_team
@@ -2660,6 +2776,10 @@ class sessionClass {
                                 const sep = (titleFormat === 'compact') ? ' @ ' : ' at '
                                 subtitle = away_team + ' (' + ar + ')' + sep + home_team + ' (' + hr + ')'
                               }
+                            }
+                            const badge = stateBadge(cache_data.dates[i].games[j].status)
+                            if ( badge ) {
+                              subtitle = badge + subtitle
                             }
 
                             if (includeTeamsInTitles != 'false') {
@@ -2771,11 +2891,21 @@ class sessionClass {
                             if ( includeBlackouts == 'true' ) location += '&includeBlackouts=' + includeBlackouts
                             if ( this.protection.content_protect ) location += '&content_protect=' + this.protection.content_protect
                             // Stable per-game UID (gamePk) so SEQUENCE bumps land on the same
-                            // event as the game progresses. SEQUENCE is derived deterministically
-                            // from status above (scheduled=0, live=1, final=2).
+                            // event as the game progresses. SEQUENCE comes from a persisted
+                            // hash-of-visible-state map: any user-visible change (status,
+                            // DTSTART, score, badge) flips the hash and increments the saved
+                            // sequence by 1. Hash mirrors what the calendar event will display
+                            // so we don't bump on internal-only field changes.
                             const gamePk = cache_data.dates[i].games[j].gamePk
                             const uidOverride = gamePk ? ('mlb-' + gamePk + '@mlbserver') : ''
-                            const seq = sequenceForGame(cache_data.dates[i].games[j].status)
+                            const stateHash = JSON.stringify({
+                              s: (cache_data.dates[i].games[j].status && cache_data.dates[i].games[j].status.detailedState) || '',
+                              t: subtitle,
+                              d: calendar_start instanceof Date ? calendar_start.toISOString() : String(calendar_start),
+                              e: calendar_stop instanceof Date ? calendar_stop.toISOString() : String(calendar_stop)
+                            })
+                            const seq = gamePk ? bumpSequence(gamePk, stateHash) : 0
+                            if ( gamePk ) seqStateDirty = true
                             calendar += await this.generate_ics_event(prefix, calendar_start, calendar_stop, subtitle, description, location, buildAltLoc(location), seq, uidOverride)
 
                             // MLB guide XML
@@ -3195,6 +3325,17 @@ class sessionClass {
       // output ICS calendar data, if requested
       } else if ( dataType == 'calendar' ) {
         body += calendar + "\n" + 'END:VCALENDAR'
+        // Persist the SEQUENCE state map only if the calendar branch
+        // actually consulted it (backFillSeason or normal MLB calendar
+        // requests). Skipped on channels/guide paths because seqState
+        // would be empty and writing zero bytes is wasteful.
+        if ( seqStateDirty ) {
+          try {
+            fs.writeFileSync(seqStateFile, JSON.stringify(seqState))
+          } catch ( e ) {
+            this.log('seq state write failed: ' + e.message)
+          }
+        }
       // otherwise output XML guide data
       } else {
         for (const [key, value] of Object.entries(channels)) {
