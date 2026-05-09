@@ -2283,6 +2283,98 @@ class sessionClass {
     }
   }
 
+  // Surgical "today only" refresh on top of getWeeksData's 20-day cache.
+  //
+  // getWeeksData caches the schedule fetch for ~24h, which is correct for
+  // the bulk schedule but means a Final score (or postponement) that flips
+  // *during the day* never propagates until tomorrow. The calendar consumer
+  // (subscribed Google/Apple Calendar via /calendar.ics) cares specifically
+  // about that mid-day transition.
+  //
+  // Strategy: leave the on-disk cache alone (don't churn its TTL), and
+  // patch today's date entry in the in-memory cache_data with a fresh
+  // single-day fetch. Trigger condition is conservative — we only spend an
+  // upstream call if cached today-data could plausibly be stale:
+  //
+  //   - any 'Live' game (score is moving)
+  //   - any 'Final' game with no linescore runs (cache predates the flip)
+  //   - any 'Preview' game whose scheduled start is within 2h either side
+  //     of now (postponement / delay catch right around first pitch)
+  //
+  // Off-days, days with everything already Final-with-runs, and days with
+  // future Preview games still hours out: short-circuit with no upstream
+  // call. The persistent SEQUENCE state in getTVData hashes visible event
+  // state per gamePk, so callers naturally get RFC-5545-compliant SEQUENCE
+  // bumps when the refreshed data changes anything user-visible.
+  async refreshTodayLiveGames(cache_data, level_ids, team_ids) {
+    try {
+      if ( !cache_data || !Array.isArray(cache_data.dates) ) return cache_data
+      const today = this.liveDate()
+      const todayIdx = cache_data.dates.findIndex(d => d && d.date === today)
+      if ( todayIdx < 0 ) return cache_data
+      const games = cache_data.dates[todayIdx].games || []
+      if ( games.length === 0 ) return cache_data
+
+      const now = Date.now()
+      const TWO_HOURS = 2 * 60 * 60 * 1000
+      const needsRefresh = games.some(g => {
+        const status = g && g.status
+        if ( !status ) return false
+        const state = status.abstractGameState
+        const detail = status.detailedState || ''
+        if ( detail === 'Postponed' || detail === 'Cancelled' || detail === 'Canceled' ) return false
+        if ( state === 'Live' ) return true
+        if ( state === 'Final' ) {
+          const ls = g.linescore && g.linescore.teams
+          const ar = ls && ls.away ? ls.away.runs : undefined
+          const hr = ls && ls.home ? ls.home.runs : undefined
+          if ( typeof ar !== 'number' || typeof hr !== 'number' ) return true
+          return false
+        }
+        if ( state === 'Preview' ) {
+          const start = g.gameDate ? new Date(g.gameDate).getTime() : NaN
+          if ( isNaN(start) ) return false
+          return Math.abs(start - now) <= TWO_HOURS
+        }
+        return false
+      })
+      if ( !needsRefresh ) return cache_data
+
+      let data_url = 'https://statsapi.mlb.com/api/v1/schedule?sportId=' + level_ids
+      if ( team_ids && team_ids !== '' ) {
+        data_url += '&teamId=' + team_ids
+      }
+      data_url += '&startDate=' + today + '&endDate=' + today + '&hydrate=broadcasts(all),probablePitcher,linescore,team'
+      this.debuglog('refreshTodayLiveGames fetching ' + data_url)
+      const reqObj = {
+        url: data_url,
+        headers: {
+          'User-agent': USER_AGENT,
+          'Origin': 'https://www.mlb.com',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Content-type': 'application/json'
+        },
+        gzip: true
+      }
+      const response = await this.httpGet(reqObj, false)
+      if ( !response || !this.isValidJson(response) ) {
+        this.log('refreshTodayLiveGames : invalid json from ' + data_url)
+        return cache_data
+      }
+      const fresh = JSON.parse(response)
+      const freshToday = (fresh.dates || []).find(d => d && d.date === today)
+      if ( !freshToday ) return cache_data
+      // Replace today's date entry in-memory only. The on-disk cache file's
+      // long TTL is preserved — that schedule is still valid for the other
+      // 19 days in the window.
+      cache_data.dates[todayIdx] = freshToday
+      return cache_data
+    } catch ( e ) {
+      this.log('refreshTodayLiveGames error : ' + e.message)
+      return cache_data
+    }
+  }
+
   // get TV data (channels or guide)
   async getTVData(dataType, mediaType, includeTeams, excludeTeams, includeLevels, includeOrgs, server, includeBlackouts, includeTeamsInTitles='false', audio_track=false, offAir='false', resolution='best', pipe='false', startingChannelNumber=1, altServer='', titleFormat='default', showScores='none', backFillSeason='false', skip='') {
     try {
@@ -2439,6 +2531,13 @@ class sessionClass {
         let cache_data = (backFillSeason === 'true' || backFillSeason === true)
           ? await this.getSeasonData(level_ids, team_ids)
           : await this.getWeeksData(level_ids, team_ids)
+        // Calendar consumers (subscribed ICS) need today's Final/Live state to
+        // propagate within the day, but getWeeksData's cache TTL is ~24h. The
+        // helper short-circuits unless today actually has an in-flight or
+        // about-to-start game, so off-days incur zero upstream calls.
+        if ( cache_data && dataType === 'calendar' && (backFillSeason !== 'true' && backFillSeason !== true) ) {
+          cache_data = await this.refreshTodayLiveGames(cache_data, level_ids, team_ids)
+        }
         if (cache_data) {
           let today = this.liveDate()
           let prevDateIndex = {MLBTV:-1,Free:-1,Audio:-1}
