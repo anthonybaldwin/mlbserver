@@ -2171,6 +2171,17 @@ class sessionClass {
       let currentDate = new Date()
       if ( !fs.existsSync(cache_file) || !this.cache || !this.cache.weeks || !this.cache.weeks[cache_name] || !this.cache.weeks[cache_name].weekCacheExpiry || (currentDate > new Date(this.cache.weeks[cache_name].weekCacheExpiry)) ) {
         let startDate = this.liveDate(utcHours)
+        // Fetch one day BEFORE startDate too. The schedule cache rolls over
+        // at 5 UTC each day; without this, a game played on day N is gone
+        // from cache_data after the day-N+1 rollover, and any subscriber
+        // ICS that still references it never sees post-rollover scoring
+        // corrections, postponement-after-the-fact updates, or the safety
+        // net of a "missed Final" catching up. The cacheExpiry below is
+        // still keyed off startDate (today), not the backfilled window
+        // start, so cache lifetime is unchanged.
+        let backfillStart = new Date(startDate)
+        backfillStart.setDate(backfillStart.getDate()-1)
+        backfillStart = backfillStart.toISOString().substring(0,10)
         let endDate = new Date(startDate)
         endDate.setDate(endDate.getDate()+20)
         endDate = endDate.toISOString().substring(0,10)
@@ -2178,7 +2189,7 @@ class sessionClass {
         if ( team_ids != '' ) {
           data_url += '&teamId=' + team_ids
         }
-        data_url += '&startDate=' + startDate + '&endDate=' + endDate + '&hydrate=broadcasts(all),probablePitcher,linescore,team'
+        data_url += '&startDate=' + backfillStart + '&endDate=' + endDate + '&hydrate=broadcasts(all),probablePitcher,linescore,team'
         let reqObj = {
           //url: 'https://bdfed.stitch.mlbinfra.com/bdfed/transform-mlb-scoreboard?stitch_env=prod&sortTemplate=2&sportId=1&sportId=17&startDate=' + startDate + '&endDate=' + endDate + '&gameType=E&&gameType=S&&gameType=R&&gameType=F&&gameType=D&&gameType=L&&gameType=W&&gameType=A&language=en&leagueId=104&leagueId=103&leagueId=131&contextTeamId=',
           url: data_url,
@@ -2364,10 +2375,42 @@ class sessionClass {
       const fresh = JSON.parse(response)
       const freshToday = (fresh.dates || []).find(d => d && d.date === today)
       if ( !freshToday ) return cache_data
-      // Replace today's date entry in-memory only. The on-disk cache file's
-      // long TTL is preserved — that schedule is still valid for the other
-      // 19 days in the window.
-      cache_data.dates[todayIdx] = freshToday
+      // Per-game merge instead of a wholesale replace. MLB's schedule
+      // endpoint occasionally returns a stripped response for a recently-
+      // Final game — status still 'Final' but linescore.teams.{away,home}
+      // .runs missing — and a blind replace would wipe a known-good score
+      // we already captured. Once the stripped state lands in cache_data,
+      // the calendar render falls through to the no-score default,
+      // getTVData's hash-based SEQUENCE bumps to publish the regression,
+      // and downstream subscribers see the score disappear. After the
+      // day-rollover at 5 UTC the game falls out of the schedule window
+      // entirely, locking the no-score state in indefinitely.
+      //
+      // Guard: per gamePk, fresh wins for everything except linescore. If
+      // cached has numeric runs for both teams and fresh is missing
+      // either, preserve the cached linescore. Status, broadcasts,
+      // gameDate, probablePitcher, and any other field still come from
+      // fresh — we only protect the user-visible score from regressing.
+      // The on-disk cache file's long TTL is preserved either way.
+      const cachedGames = (cache_data.dates[todayIdx] && cache_data.dates[todayIdx].games) || []
+      const cachedByPk = new Map()
+      for ( const cg of cachedGames ) {
+        if ( cg && cg.gamePk != null ) cachedByPk.set(cg.gamePk, cg)
+      }
+      const mergedGames = (freshToday.games || []).map(fg => {
+        const cg = cachedByPk.get(fg && fg.gamePk)
+        if ( !cg ) return fg
+        const cls = cg.linescore && cg.linescore.teams
+        const cAr = cls && cls.away ? cls.away.runs : undefined
+        const cHr = cls && cls.home ? cls.home.runs : undefined
+        if ( typeof cAr !== 'number' || typeof cHr !== 'number' ) return fg
+        const fls = fg.linescore && fg.linescore.teams
+        const fAr = fls && fls.away ? fls.away.runs : undefined
+        const fHr = fls && fls.home ? fls.home.runs : undefined
+        if ( typeof fAr === 'number' && typeof fHr === 'number' ) return fg
+        return Object.assign({}, fg, { linescore: cg.linescore })
+      })
+      cache_data.dates[todayIdx] = Object.assign({}, freshToday, { games: mergedGames })
       return cache_data
     } catch ( e ) {
       this.log('refreshTodayLiveGames error : ' + e.message)
