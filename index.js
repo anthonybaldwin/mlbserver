@@ -1267,10 +1267,17 @@ app.get('/gamechangerplaylist.m3u8', async function(req, res) {
               let new_segments = []
               let new_segments_complete = false
               let segment_count = 0
-              for (var i=(body.length-1); i>=0; i--) {
+              let key
+              let iv
+              for (var i=0; i<body.length; i++) {
                 if ( body[i].startsWith('#EXT-X-KEY') ) {
-                  let key = url.resolve(u, body[i].match('URI="([^"]+)"')[1])
-                  let iv = body[i].match('IV=0x(.*)$')[1]
+                  key = url.resolve(u, body[i].match('URI="([^"]+)"')[1])
+                  iv = body[i].match('IV=0x(.*)$')[1]
+                  break
+                }
+              }
+              if ( key && iv ) {
+                for (var i=(body.length-1); i>=0; i--) {
                   let ts
                   let extinf
                   for (var j=1; j<=4; j++) {
@@ -1283,7 +1290,7 @@ app.get('/gamechangerplaylist.m3u8', async function(req, res) {
                       if ( extinf && ts ) break;
                     }
                   }
-                  if ( key && iv && extinf && ts && !new_segments_complete ) {
+                  if ( extinf && ts && !new_segments_complete ) {
                     session.debuglog(game_changer_title + 'found segment ' + ts)
                     if ( discontinuity ) {
                       session.debuglog(game_changer_title + 'only getting newest segment after stream change')
@@ -1304,9 +1311,9 @@ app.get('/gamechangerplaylist.m3u8', async function(req, res) {
                     }
                   }
                   segment_count++
-                }
-                if ( new_segments_complete ) {
-                  break
+                  if ( new_segments_complete ) {
+                    break
+                  }
                 }
               }
 
