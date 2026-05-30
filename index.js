@@ -1277,17 +1277,14 @@ app.get('/gamechangerplaylist.m3u8', async function(req, res) {
                 }
               }
               if ( key && iv ) {
+                let ts
+                let extinf
                 for (var i=(body.length-1); i>=0; i--) {
-                  let ts
-                  let extinf
-                  for (var j=1; j<=4; j++) {
-                    if ( body[i+j] ) {
-                      if ( !extinf && body[i+j].startsWith('#EXTINF') ) {
-                        extinf = body[i+j]
-                      } else if ( !ts && !body[i+j].startsWith('#') ) {
-                        ts = url.resolve(u, body[i+j])
-                      }
-                      if ( extinf && ts ) break;
+                  if ( body[i] ) {
+                    if ( !extinf && body[i].startsWith('#EXTINF') ) {
+                      extinf = body[i]
+                    } else if ( !ts && !body[i].startsWith('#') ) {
+                      ts = url.resolve(u, body[i])
                     }
                   }
                   if ( extinf && ts && !new_segments_complete ) {
@@ -1309,10 +1306,12 @@ app.get('/gamechangerplaylist.m3u8', async function(req, res) {
                     } else {
                       new_segments.unshift({'key':key, 'iv':iv, 'extinf':extinf, 'ts':ts, 'streamURLToken':streamURLToken})
                     }
-                  }
-                  segment_count++
-                  if ( new_segments_complete ) {
-                    break
+                    segment_count++
+                    ts = false
+                    extinf = false
+                    if ( new_segments_complete ) {
+                      break
+                    }
                   }
                 }
               }
