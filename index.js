@@ -2081,7 +2081,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     <span class="time">Subscription streams</span>
                   </div>
               </div>
-              <div class="gameContent space-around">`
+              <div class="gameContent space-around">
+                <div class="prePostLegend">
+                  <span><span class="prePostIndicator prePostLegendIndicator" title="Pregame show"><span class="prePostCircle prePostCircleActive"></span><span class="prePostCircle prePostCircleInactive"></span></span>Pregame show</span>
+                  <span><span class="prePostIndicator prePostLegendIndicator" title="Postgame show"><span class="prePostCircle prePostCircleInactive"></span><span class="prePostCircle prePostCircleActive"></span></span>Postgame show</span>
+                </div>`
 
     
 
@@ -2687,12 +2691,22 @@ document.addEventListener("DOMContentLoaded", function () {
                   // check if language is not set (video) or it matches requested language
                   if ( broadcast.language == language ) {
                     let station = broadcast.callSign
+                    let hasPregameShow = pre_post_shows.pregame_shows && pre_post_shows.pregame_shows[broadcast.mediaId]
+                    let hasPostgameShow = pre_post_shows.postgame_shows && pre_post_shows.postgame_shows[broadcast.mediaId]
+                    let prePostIndicator = ''
 
-                    if ( pre_post_shows.pregame_shows && pre_post_shows.pregame_shows[broadcast.mediaId] ) {
-                      station = '/' + station
-                    }
-                    if ( pre_post_shows.postgame_shows && pre_post_shows.postgame_shows[broadcast.mediaId] ) {
-                      station += '/'
+                    if ( hasPregameShow || hasPostgameShow ) {
+                      let prePostTitle = 'Pregame show available'
+                      if ( hasPregameShow && hasPostgameShow ) {
+                        prePostTitle = 'Pregame and postgame shows available'
+                      } else if ( hasPostgameShow ) {
+                        prePostTitle = 'Postgame show available'
+                      }
+                      prePostIndicator =
+                        '<span class="prePostIndicator" title="' + prePostTitle + '">' +
+                        '<span class="prePostCircle ' + (hasPregameShow ? 'prePostCircleActive' : 'prePostCircleInactive') + '"></span>' +
+                        '<span class="prePostCircle ' + (hasPostgameShow ? 'prePostCircleActive' : 'prePostCircleInactive') + '"></span>' +
+                        '</span>'
                     }
 
                     if ( blackouts[gamePk] && blackouts[gamePk].blackout_feeds && blackouts[gamePk].blackout_feeds.includes(broadcast.mediaId) ) {
@@ -2715,7 +2729,8 @@ document.addEventListener("DOMContentLoaded", function () {
                       let mediaId = broadcast.mediaId
                          if ( (mediaTypeTV == 'MLBTV') && (gameDate == today) && session.cache.media && session.cache.media[mediaId] && session.cache.media[mediaId].blackout && session.cache.media[mediaId].blackoutExpiry && (new Date(session.cache.media[mediaId].blackoutExpiry) > new Date()) ) {
                         streamSource.awayTV +=
-                          '<span class="streamAction streamActionInactive blackoutstation">' + station + '</span>'
+                          '<span class="streamAction streamActionInactive blackoutstation">' + station + '</span>' +
+                          prePostIndicator
                       } else {
                         let querystring 
                         querystring = '?mediaId=' + mediaId
@@ -2756,10 +2771,10 @@ document.addEventListener("DOMContentLoaded", function () {
                         multiviewquerystring += content_protect_b
                         stationlink = '<a class="streamAction" href="' + thislink + querystring + '">' + station + '</a>'
 
-                        let streamStationHtml = stationlink
+                        let streamStationHtml = stationlink + prePostIndicator
 
                         if ( blackouts[gamePk] && blackouts[gamePk].blackout_feeds && blackouts[gamePk].blackout_feeds.includes(broadcast.mediaId) ) {
-                          streamStationHtml = '<span class="blackout">' + stationlink + '</span>'
+                          streamStationHtml = '<span class="blackout">' + stationlink + '</span>' + prePostIndicator
                         }
 
                         let resumeStreamSuffix = ''
@@ -2827,9 +2842,9 @@ document.addEventListener("DOMContentLoaded", function () {
                       let inactiveStation = station
 
                       if ( blackouts[gamePk] && blackouts[gamePk].blackout_feeds && blackouts[gamePk].blackout_feeds.includes(broadcast.mediaId) ) {
-                        inactiveStation = '<span class="streamAction streamActionInactive blackoutstation">' + station + '</span>'
+                        inactiveStation = '<span class="streamAction streamActionInactive blackoutstation">' + station + '</span>' + prePostIndicator
                       } else {
-                        inactiveStation = '<span class="streamAction streamActionInactive">' + station + '</span>'
+                        inactiveStation = '<span class="streamAction streamActionInactive">' + station + '</span>' + prePostIndicator
                       }
 
                       if (broadcast.homeAway == 'home') {streamSource.homeTV +=

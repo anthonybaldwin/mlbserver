@@ -593,6 +593,58 @@ h1 {
     cursor: not-allowed;
 }
 
+.prePostIndicator {
+    display: inline-flex;
+    align-items: center;
+    isolation: isolate;
+    margin-left: 4px;
+    vertical-align: middle;
+}
+
+.prePostCircle {
+    width: 0.5rem;
+    height: 0.5rem;
+    background: var(--color-panel);
+    border: 1px solid var(--color-accent);
+    border-radius: 50%;
+    box-sizing: border-box;
+    box-shadow: 0 0 0 1px var(--color-panel);
+}
+
+.prePostCircle + .prePostCircle {
+    margin-left: -0.1rem;
+}
+
+.prePostCircleActive {
+    background: var(--color-accent);
+    position: relative;
+    z-index: 1;
+}
+
+.prePostCircleInactive {
+    border-color: var(--color-disabled);
+    opacity: 0.45;
+}
+
+.prePostLegend {
+    color: var(--color-text-muted);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: 0.72rem;
+    gap: 8px;
+    margin: 2px 0 6px;
+}
+
+.prePostLegend span {
+    display: inline-flex;
+    align-items: center;
+}
+
+.prePostLegendIndicator {
+    margin-left: 0;
+    margin-right: 4px;
+}
+
 .videosInactive {
     width: 90px;
     min-height: 0.9rem;
