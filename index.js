@@ -3096,6 +3096,7 @@ body += `
           <div class="menuContainer">
             <div class="cardMenuHeader">Stream Finder Settings</div>
             <div class="menuContent streamFinderContent">
+             <div>Automatically switches between games according to your preferences. This program is not affiliated with Baseball Reference, do not contact them for support.</div>
               <div>
                 <a class="channelLink" download="mlbserverStreamFinder.txt" href="${http_root}/downloadsettings${content_protect_a}">Download current settings</a>
               </div>
@@ -3119,7 +3120,6 @@ body += `
                   </div>
                 </div>
               </div>
-              <div class="streamFinderNote">Automatically switches between games according to your preferences. This program is not affiliated with Baseball Reference, do not contact them for support.</div>
             </div>
           </div>` + "\n"
     }

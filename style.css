@@ -161,10 +161,6 @@ h1 {
     padding: 2px 0;
 }
 
-.cardMenuHeader~span {
-    font-size: 0.75rem;
-}
-
 .menuContent {
     margin: 10px;
 }
@@ -182,13 +178,6 @@ h1 {
     display: grid;
     gap: 6px;
     padding: 2px;
-}
-
-.settingsGroupHeader {
-    color: var(--color-accent);
-    font-size: 0.78rem;
-    font-weight: bold;
-    padding-bottom: 3px;
 }
 
 .settingRow {
@@ -337,13 +326,6 @@ h1 {
     font-size: 0.78rem;
 }
 
-.channelSectionTitle {
-    color: var(--color-accent);
-    font-size: 0.78rem;
-    font-weight: bold;
-    margin-top: 8px;
-}
-
 .multiviewContent {
     display: grid;
     gap: 10px;
@@ -434,13 +416,6 @@ h1 {
     font-size: 0.8em;
 }
 
-.multiviewSectionTitle {
-    color: var(--color-accent);
-    font-size: 0.78rem;
-    font-weight: bold;
-    margin-top: 4px;
-}
-
 .multiviewAudioRow {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 4rem;
@@ -508,8 +483,7 @@ h1 {
     font-weight: bold;
 }
 
-.streamFinderStepText,
-.streamFinderNote {
+.streamFinderStepText {
     color: var(--color-text-muted);
     font-size: 0.82rem;
 }
@@ -807,12 +781,6 @@ h1 {
 
 }
 
-.stream span {
-    height: 1.0rem;
-    display: flex;
-    align-items: center;
-}
-
 .tag {
     display: inline-flex;
     align-items: center;
@@ -948,12 +916,6 @@ button.default {
     font-weight: bold;
 }
 
-.closingLine {
-    display: flex;
-    justify-content: center;
-    padding-top: 15px;
-}
-
 textarea {
     width: 70%;
     height: 2rem;
@@ -961,10 +923,6 @@ textarea {
     background-color: var(--color-bg);
     color: var(--color-text);
     border: 1px solid var(--color-disabled);
-}
-
-.option {
-    margin: 10px 0;
 }
 
 .tooltip {
