@@ -363,6 +363,13 @@ h1 {
     gap: 6px;
 }
 
+.multiviewInfoButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: text-bottom;
+}
+
 .multiviewAction {
     border: 1px solid var(--color-pill-accent-border);
     border-radius: 4px;
@@ -610,6 +617,18 @@ h1 {
 .subscriptionStream span {
     display: flex;
     align-items: center;
+}
+
+.subscriptionLabel {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.subscriptionLabel .info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .is-flex {
