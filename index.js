@@ -2598,7 +2598,7 @@ document.addEventListener("DOMContentLoaded", function () {
             if ( broadcastName == 'N/A' ) {
               streamSource.homeTV +=
                 '<span>' +
-                '<span>' + broadcastName + '</span>' +
+                '<span class="streamAction streamActionInactive">' + broadcastName + '</span>' +
                 '</span>'
             } else {
               // Check if game should be live
@@ -2654,13 +2654,13 @@ document.addEventListener("DOMContentLoaded", function () {
                     multiviewquerystring +
                     '" onclick="addmultiview(this)">' +
                     '<span>' +
-                    '<a href="' + thislink + querystring + '">' + broadcastName + '</a>' +
+                    '<a class="streamAction" href="' + thislink + querystring + '">' + broadcastName + '</a>' +
                     '</span>' +
                     '</span>'
                 } else {
                   streamSource.homeTV +=
                     '<span>' +
-                    '<span>' + broadcastName + '</span>' +
+                    '<span class="streamAction streamActionInactive">' + broadcastName + '</span>' +
                     '</span>'
                 }
               }
@@ -2686,16 +2686,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
                   // check if language is not set (video) or it matches requested language
                   if ( broadcast.language == language ) {
-                    let teamabbr
-
-                    if ( broadcast.isNational ) {
-                      teamabbr = 'NATIONAL'
-                    } else {
-                      teamabbr = hometeam_abbr
-                      if ( broadcast.homeAway == 'away' ) {
-                        teamabbr = awayteam_abbr
-                      }
-                    }
                     let station = broadcast.callSign
 
                     if ( pre_post_shows.pregame_shows && pre_post_shows.pregame_shows[broadcast.mediaId] ) {
@@ -2716,8 +2706,6 @@ document.addEventListener("DOMContentLoaded", function () {
                       }
                     }
 
-                    let streamPrefix = teamabbr + ': '
-
                     if ( broadcast.mediaState && broadcast.mediaState.mediaStateCode && ((broadcast.mediaState.mediaStateCode == 'MEDIA_ON') || (broadcast.mediaState.mediaStateCode == 'MEDIA_ARCHIVE') || (abstractGameState == 'Final')) ) {
                       let gameTime = new Date(cache_data.dates[0].games[j].gameDate)
                       gameTime.setMinutes(gameTime.getMinutes()-10)
@@ -2727,8 +2715,7 @@ document.addEventListener("DOMContentLoaded", function () {
                       let mediaId = broadcast.mediaId
                          if ( (mediaTypeTV == 'MLBTV') && (gameDate == today) && session.cache.media && session.cache.media[mediaId] && session.cache.media[mediaId].blackout && session.cache.media[mediaId].blackoutExpiry && (new Date(session.cache.media[mediaId].blackoutExpiry) > new Date()) ) {
                         streamSource.awayTV +=
-                          streamPrefix +
-                          '<span class="blackoutstation">' + station + '</span>'
+                          '<span class="streamAction streamActionInactive blackoutstation">' + station + '</span>'
                       } else {
                         let querystring 
                         querystring = '?mediaId=' + mediaId
@@ -2767,7 +2754,7 @@ document.addEventListener("DOMContentLoaded", function () {
                         }
                         querystring += content_protect_b
                         multiviewquerystring += content_protect_b
-                        stationlink = '<a' + ' href="' + thislink + querystring + '">' + station + '</a>'
+                        stationlink = '<a class="streamAction" href="' + thislink + querystring + '">' + station + '</a>'
 
                         let streamStationHtml = stationlink
 
@@ -2775,6 +2762,15 @@ document.addEventListener("DOMContentLoaded", function () {
                           streamStationHtml = '<span class="blackout">' + stationlink + '</span>'
                         }
 
+                        let resumeStreamSuffix = ''
+                        // For suspended games that are currently live, mark whether this feed is part 1 or part 2.
+                        if ( resumeStatus == 'live' ) {
+                          if ( broadcast.mediaState.mediaStateCode == 'MEDIA_ARCHIVE' ) {
+                            resumeStreamSuffix = '(1)'
+                          } else {
+                            resumeStreamSuffix = '(2)'
+                          }
+                        }
 
                       if (broadcast.homeAway == 'home') {
                         streamSource.homeTV += '<span>'
@@ -2793,41 +2789,10 @@ document.addEventListener("DOMContentLoaded", function () {
                         }
 
                         streamSource.homeTV +=
-                          '<span>' +
-                          streamPrefix +
-                          streamStationHtml
-
-                        if ( resumeStatus ) {
-                          streamSource.homeTV += '('
-                          // for suspended games that haven't finished yet, we can simply use the mediaState to determine the status
-
-                          if ( resumeStatus == 'live' ) {
-                            if ( broadcast.mediaState.mediaStateCode == 'MEDIA_ARCHIVE' ) {
-                              streamSource.homeTV += '1'
-                            } else {
-                              streamSource.homeTV += '2'
-                            }
-                            // otherwise, for completed games, we need to check the airings data
-                          }
-                          /*airings_data = await session.getAiringsData('', cache_data.dates[0].games[j].gamePk)
-                          if ( airings_data.data && airings_data.data.Airings && (airings_data.data.Airings.length > 0) ) {
-                            for (var y = 0; y < airings_data.data.Airings.length; y++) {
-                              if ( airings_data.data.Airings[y].contentId == cache_data.dates[0].games[j].content.media.epg[k].items[x].contentId ) {
-                                if ( (cache_data.dates[0].games[j].resumeDate && (cache_data.dates[0].games[j].resumeDate == airings_data.data.Airings[y].startDate)) || (cache_data.dates[0].games[j].resumedFrom && (cache_data.dates[0].games[j].gameDate == airings_data.data.Airings[y].startDate)) ) {
-                                  body += '2'
-                                } else {
-                                  body += '1'
-                                }
-                                break
-                              }
-                            }
-                          }*/
-
-                          streamSource.homeTV += ')'
-                        }
+                          streamStationHtml +
+                          resumeStreamSuffix
 
                         streamSource.homeTV +=
-                          '</span>' +
                           '</span>'
                       } else if (broadcast.homeAway == 'away') {
                         streamSource.awayTV += '<span>'
@@ -2846,38 +2811,8 @@ document.addEventListener("DOMContentLoaded", function () {
                         }
 
                         streamSource.awayTV +=
-
-                          streamPrefix +
-                          streamStationHtml
-
-                        if ( resumeStatus ) {
-                          streamSource.awayTV += '('
-                          // for suspended games that haven't finished yet, we can simply use the mediaState to determine the status
-
-                          if ( resumeStatus == 'live' ) {
-                            if ( broadcast.mediaState.mediaStateCode == 'MEDIA_ARCHIVE' ) {
-                              streamSource.awayTV += '1'
-                            } else {
-                              streamSource.awayTV += '2'
-                            }
-                            // otherwise, for completed games, we need to check the airings data
-                          }
-                          /*airings_data = await session.getAiringsData('', cache_data.dates[0].games[j].gamePk)
-                          if ( airings_data.data && airings_data.data.Airings && (airings_data.data.Airings.length > 0) ) {
-                            for (var y = 0; y < airings_data.data.Airings.length; y++) {
-                              if ( airings_data.data.Airings[y].contentId == cache_data.dates[0].games[j].content.media.epg[k].items[x].contentId ) {
-                                if ( (cache_data.dates[0].games[j].resumeDate && (cache_data.dates[0].games[j].resumeDate == airings_data.data.Airings[y].startDate)) || (cache_data.dates[0].games[j].resumedFrom && (cache_data.dates[0].games[j].gameDate == airings_data.data.Airings[y].startDate)) ) {
-                                  body += '2'
-                                } else {
-                                  body += '1'
-                                }
-                                break
-                              }
-                            }
-                          }*/
-
-                          streamSource.awayTV += ')'
-                        }
+                          streamStationHtml +
+                          resumeStreamSuffix
 
                         streamSource.awayTV +=
 
@@ -2892,19 +2827,19 @@ document.addEventListener("DOMContentLoaded", function () {
                       let inactiveStation = station
 
                       if ( blackouts[gamePk] && blackouts[gamePk].blackout_feeds && blackouts[gamePk].blackout_feeds.includes(broadcast.mediaId) ) {
-                        inactiveStation = '<span class="blackoutstation">' + station + '</span>'
+                        inactiveStation = '<span class="streamAction streamActionInactive blackoutstation">' + station + '</span>'
+                      } else {
+                        inactiveStation = '<span class="streamAction streamActionInactive">' + station + '</span>'
                       }
 
                       if (broadcast.homeAway == 'home') {streamSource.homeTV +=
                         '<div>' +
                         '<div>' +
-                        streamPrefix +
                         inactiveStation +
                         '</div>' +
                         '</div>' } else if (broadcast.homeAway == 'away') {streamSource.awayTV +=
                         '<div>' +
                         '<div>' +
-                        streamPrefix +
                         inactiveStation +
                         '</div>' +
                         '</div>' }
