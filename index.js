@@ -2697,11 +2697,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     let prePostIndicator = ''
 
                     if ( hasPregameShow || hasPostgameShow ) {
-                      let prePostTitle = 'Pregame show available'
+                      let prePostTitle = 'Pregame show'
                       if ( hasPregameShow && hasPostgameShow ) {
-                        prePostTitle = 'Pregame and postgame shows available'
+                        prePostTitle = 'Pre- & postgame shows'
                       } else if ( hasPostgameShow ) {
-                        prePostTitle = 'Postgame show available'
+                        prePostTitle = 'Postgame show'
                       }
                       prePostIndicator =
                         '<span class="prePostIndicator" title="' + prePostTitle + '">' +
