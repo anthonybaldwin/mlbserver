@@ -2226,9 +2226,9 @@ document.addEventListener("DOMContentLoaded", function () {
         big_inning = await session.getBigInningSchedule(gameDate)
       }
       if ( big_inning ) {
+        let bigInningRendered = false
         for (var i = 0; i < big_inning.length; i++) {
-          if ( big_inning[i].start ) {
-            let bigInningInfoId = 'bigInningInfo' + i
+          if ( big_inning[i].start && !bigInningRendered ) {
             body += '<div class="flex-between subscriptionStream">' + "\n"
             body += '<span class="tinytext">' + new Date(big_inning[i].start).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + ' - ' + new Date(big_inning[i].end).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + '</span>'
             let compareStart = new Date(big_inning[i].start)
@@ -2250,13 +2250,14 @@ document.addEventListener("DOMContentLoaded", function () {
               }
               querystring += content_protect_b
               multiviewquerystring += content_protect_b
-              body += '<span>' + subscriptionInfoLabel('<a href="' + thislink + querystring + '">Big Inning</a>', bigInningInfoId)
+              body += '<span>' + subscriptionInfoLabel('<a href="' + thislink + querystring + '">Big Inning</a>', 'bigInningInfo')
               body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + '/stream.m3u8' + multiviewquerystring + '" onclick="addmultiview(this)"></span>'
             } else {
-              body += subscriptionInfoLabel('Big Inning', bigInningInfoId)
+              body += subscriptionInfoLabel('Big Inning', 'bigInningInfo')
             }
             body += '</div>' + "\n"
-            body += subscriptionInfo(bigInningInfoId, 'bigInning')
+            body += subscriptionInfo('bigInningInfo', 'bigInning')
+            bigInningRendered = true
           }
         }
       }
