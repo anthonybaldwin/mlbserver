@@ -1490,7 +1490,7 @@ app.get('/login', async function(req, res) {
     const redirect = req.query.redirect || '/';
     const error = req.query.error ? '<p style="color:red;">Invalid username or password</p>' : '';
     res.writeHead(200, {'Content-Type': 'text/html'});
-    res.end(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Login - ${appname}</title><style>body{color:lightgray;background-color:black;font-family:Arial,Helvetica,sans-serif;}input{background-color:black;color:lightgray;border:1px solid lightgray;}button{background-color:black;color:lightgray;border:1px solid lightgray;}</style></head><body><h1>Login to ${appname}</h1>${error}<form method="POST" action="${http_root}/login"><input type="hidden" name="redirect" value="${redirect}"><p>Username: <input type="text" name="username" required></p><p>Password: <input type="password" name="password" required></p><p><button type="submit">Login</button></p></form></body></html>`);
+    res.end(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Login - ${appname}</title><style>html,body{background-color:#0e0e0e;color:LightGray;font-family:Verdana,Tahoma,Roboto,sans-serif}h1{margin:0;;color:goldenrod}button{color:#000;background-color:lightgray;min-width:3rem;border:none;padding:1px 5px 1px 5px;text-align:center;text-decoration:none;display:inline-block;font-size:.9rem;border-radius:4px;cursor:pointer;margin:2px}</style></head><body><h1>Login to ${appname}</h1>${error}<form method="POST" action="${http_root}/login"><input type="hidden" name="redirect" value="${redirect}"><p>Username: <input type="text" name="username" required></p><p>Password: <input type="password" name="password" required></p><p><button type="submit">Login</button></p></form></body></html>`);
   } catch (e) {
     session.log('login get request error : ' + e.message);
     res.end('login get request error, check log');
@@ -1739,7 +1739,7 @@ app.get('/', async function(req, res) {
 		body += '</script></head><body><h1>' + appname + '</h1>' + "\n"
 
     if (argv.login_page) {
-      body += '<p><a href="' + http_root + '/logout">Logout</a></p>' + "\n"
+      body += '<p><form action="' + http_root + '/logout" method="GET"><button type="submit">Logout</button></form></p>' + "\n"
     }
     body +=`<div class="section">`
     body += '<div class="menuContainer settingsContainer">'
