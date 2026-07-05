@@ -1,8 +1,15 @@
 # Calendar: show blacked-out games as link-less events
 
-**Date:** 2026-06-05
-**Status:** Approved design — pending implementation plan
+**Date:** 2026-06-05 (implemented 2026-07-05)
+**Status:** Implemented — extended to provider-aware three-way labeling
 **Scope:** `calendar.ics` output only (`getTVData` with `dataType == 'calendar'`)
+
+> **Implementation note (2026-07-05):** shipped with a three-way badge instead
+> of the single `[BLACKOUT]` this doc originally specified. National feeds are
+> distinguished from geographic blackouts via `broadcast.isNational`, and the
+> national badge surfaces the carrier (`[PEACOCK]`) when `broadcast.callSign`
+> is present, falling back to `[NATIONAL]`. Only a true (regional) blackout
+> lifts, so only `[BLACKOUT]` carries a lift-time note. See §2 below.
 
 ## Problem
 
@@ -20,7 +27,10 @@ blackout lifts and where the game is actually viewable.
 
 For `calendar.ics` only, a blacked-out feed produces a VEVENT that:
 
-- Has a `[BLACKOUT]` badge in the SUMMARY (drops the misleading "Watch" prefix).
+- Has a state badge in the SUMMARY (drops the misleading "Watch" prefix).
+  Three-way: `[PEACOCK]`/carrier name for an identified national feed,
+  `[NATIONAL]` for a national feed with no `callSign`, `[BLACKOUT]` for a
+  regional/RSN blackout.
 - Carries **no playable link** anywhere (no `Watch:` line, no `Alternate:`
   line, no stream-URL fallback in `LOCATION`).
 - Notes the blackout type, the approximate lift time, and where the game is
@@ -100,35 +110,41 @@ When `isBlackout`:
   `streamUrl`. Empty `LOCATION` is acceptable when venue is unknown.
 - **Alternate:** pass `altLocation = ''` (not `buildAltLoc(...)`).
 - **Prefix:** force `prefix = ''` (no "Watch"/"Listen").
-- **Badge:** prepend `[BLACKOUT] ` to `subtitle`, after any existing
-  `stateBadge(...)`. Result SUMMARY: `[BLACKOUT] Tigers @ Royals`.
+- **Badge (three-way):** discriminate on `broadcast.isNational`, then prepend
+  to `subtitle`:
+  - national + `station` → `[<STATION.toUpperCase()>] ` (e.g. `[PEACOCK] `)
+  - national + no `station` → `[NATIONAL] `
+  - otherwise → `[BLACKOUT] `
 - **Note:** append a blackout note to `description` (built below).
 - **Alarm:** suppress the VALARM (see §3).
 
-Blackout note construction:
+Blackout note construction (as implemented — keyed off `isNational`, not
+`blackout_type`, because the feed being rendered is the direct signal):
 
 ```js
-let note
-if ( blackouts[gamePk].blackout_type == 'Not entitled' ) {
-  note = 'Not entitled'
-} else {
-  note = 'Video blackout until approx. 2.5 hours after the game'
-  const expiry = await this.get_blackout_expiry(cache_data.dates[i].games[j])
-  if ( expiry ) {
-    note += ' (~' + expiry.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + ')'
+let blackoutNote = ''
+if ( isBlackout ) {
+  if ( broadcast.isNational == true ) {
+    subtitle = (station ? ('[' + station.toUpperCase() + '] ') : '[NATIONAL] ') + subtitle
+    blackoutNote = station ? ('National broadcast — watch on ' + station) : 'National broadcast (not on MLB.TV)'
+  } else {
+    subtitle = '[BLACKOUT] ' + subtitle
+    blackoutNote = 'Video blackout until approx. 2.5 hours after the game'
+    const expiry = await this.get_blackout_expiry(cache_data.dates[i].games[j])
+    if ( expiry ) blackoutNote += ' (~' + expiry.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + ')'
+    if ( station ) blackoutNote += ': ' + station
   }
 }
-if ( station ) note += ': ' + station    // where the game is viewable
-description += note
+// appended to description after the suspended/TBD handling:
+if ( isBlackout && blackoutNote ) description += blackoutNote
 ```
 
-- Mirrors the existing HTML tooltip phrasing (`index.js:2391-2397`) for
-  consistency.
-- `station` doubles as "where it's viewable": for a national exclusive the
-  blacked-out feed's `callSign` is the national partner ("Apple TV"); for a
-  local RSN blackout it's the RSN. Omit the `: <station>` suffix when `station`
-  is falsy. Omit the `(~time)` when expiry can't be computed.
-- `Not entitled` blackouts have no 2.5-hour lift, so they get no expiry clause.
+- `station` is `broadcast.callSign` (`session.js`), which for a national
+  exclusive is the carrier ("Peacock", "Apple TV+") and doubles as "where it's
+  viewable". Omit the `: <station>` suffix (RSN case) and the national
+  "watch on" clause when `station` is falsy.
+- Only a real (regional) blackout lifts, so only that branch computes an
+  expiry / `(~time)` clause; national exclusives never do.
 
 ### 3. Suppress the VALARM for blackout events (`generate_ics_event`, `session.js:5843`)
 
@@ -161,21 +177,24 @@ note text changes.
 
 ## Output example
 
-A blacked-out national-exclusive game (Apple TV+), default calendar:
+A blacked-out national-exclusive game (Peacock), default calendar:
 
 ```
 BEGIN:VEVENT
-UID:mlb-776543@mlbserver
+UID:mlb-822715@mlbserver
 SEQUENCE:0
-SUMMARY:[BLACKOUT] Tigers @ Royals
-DTSTART:20260605T231500Z
-DTEND:20260606T021500Z
-DESCRIPTION:Apple TV. <pitchers etc.>. Video blackout until approx. 2.5 hours after the game (~10:23 PM): Apple TV
-LOCATION:Kauffman Stadium
+SUMMARY:[PEACOCK] Cubs @ Cardinals
+DTSTART:20260705T163500Z
+DTEND:20260705T193500Z
+DESCRIPTION:Peacock. <pitchers etc.>. National broadcast — watch on Peacock
+LOCATION:Wrigley Field
 END:VEVENT
 ```
 
-No `Watch:`/`Alternate:` lines, no URL in `LOCATION`, no `VALARM`.
+A regional/RSN blackout instead reads `SUMMARY:[BLACKOUT] …` with a
+`Video blackout until approx. 2.5 hours after the game (~2:43 PM): Marquee`
+note. Either way: no `Watch:`/`Alternate:` lines, no URL in `LOCATION`, no
+`VALARM`.
 
 ## Out of scope / known pre-existing edges
 
@@ -190,8 +209,11 @@ No `Watch:`/`Alternate:` lines, no URL in `LOCATION`, no `VALARM`.
 ## Testing
 
 - **Unit-ish:** a blacked-out feed on a `calendar` request emits a VEVENT with
-  `[BLACKOUT]` SUMMARY, no `Watch:`/`Alternate:`/URL-`LOCATION`, no `VALARM`,
-  and a `Video blackout … (~time): <station>` note.
+  a state badge, no `Watch:`/`Alternate:`/URL-`LOCATION`, and no `VALARM`.
+- **Three-way label:** national feed with `callSign` → `[PEACOCK]` +
+  `National broadcast — watch on Peacock`; national feed w/o `callSign` →
+  `[NATIONAL]`; regional blackout → `[BLACKOUT]` + `Video blackout … (~time):
+  <station>` note (only this branch has a lift time).
 - **Regression:** the same blacked-out feed on `channels`/`guide` requests is
   still skipped (no channel, no programme).
 - **Override:** `&includeBlackouts=true` still emits real playable links for the

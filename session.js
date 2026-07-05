@@ -2781,8 +2781,17 @@ class sessionClass {
                       
                         // check blackout or non-entitlement status, if necessary
                         let gamePk = cache_data.dates[i].games[j].gamePk.toString()
+                        // For calendar.ics we keep blacked-out games instead of
+                        // dropping them silently: fall through and render a
+                        // link-less, badged event (see the isBlackout blocks below).
+                        // M3U/XML still skip — a link-less channel is meaningless
+                        // there. includeBlackouts=true keeps emitting real links.
+                        let isBlackout = false
                         if ( (includeBlackouts == 'false') && blackouts[gamePk] && blackouts[gamePk].blackout_feeds && blackouts[gamePk].blackout_feeds.includes(broadcast.mediaId) ) {
-                          continue
+                          if ( dataType != 'calendar' ) {
+                            continue
+                          }
+                          isBlackout = true
                         }
 
                         if ( (broadcast.type == 'TV') || ((mediaType == 'Audio') && (broadcast.language == language)) ) {
@@ -2924,6 +2933,26 @@ class sessionClass {
                               subtitle = badge + subtitle
                             }
 
+                            // Blacked-out calendar events: keep the event but make it
+                            // unmistakably unwatchable on MLB.TV. Three-way label —
+                            // a national feed shows its carrier ([PEACOCK]) or a
+                            // generic [NATIONAL] when the callSign is missing; a
+                            // regional/RSN blackout shows [BLACKOUT] (the only kind
+                            // that actually lifts, so only it earns a lift-time note).
+                            let blackoutNote = ''
+                            if ( isBlackout ) {
+                              if ( broadcast.isNational == true ) {
+                                subtitle = (station ? ('[' + station.toUpperCase() + '] ') : '[NATIONAL] ') + subtitle
+                                blackoutNote = station ? ('National broadcast — watch on ' + station) : 'National broadcast (not on MLB.TV)'
+                              } else {
+                                subtitle = '[BLACKOUT] ' + subtitle
+                                blackoutNote = 'Video blackout until approx. 2.5 hours after the game'
+                                const expiry = await this.get_blackout_expiry(cache_data.dates[i].games[j])
+                                if ( expiry ) blackoutNote += ' (~' + expiry.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + ')'
+                                if ( station ) blackoutNote += ': ' + station
+                              }
+                            }
+
                             if (includeTeamsInTitles != 'false') {
                               if ( includeTeamsInTitles == 'channels' ) {
                                 title = this.channelsFormattedTitle(subtitle, cache_data.dates[i].games[j].gameDate)
@@ -2999,6 +3028,9 @@ class sessionClass {
                             } else if ( cache_data.dates[i].games[j].status.startTimeTBD == true ) {
                               continue
                             }
+                            if ( isBlackout && blackoutNote ) {
+                              description += blackoutNote
+                            }
                             let start = this.convertDateToXMLTV(gameDate)
                             // Clone gameDate before deriving stopDate — Date.setHours
                             // mutates in place, and aliasing calendar_start/stopDate to
@@ -3023,6 +3055,9 @@ class sessionClass {
                               }
                               prefix += ' to'
                             }
+                            // Link-less blackout events have no playable target, so
+                            // drop the "Watch"/"Listen" prefix from the SUMMARY.
+                            if ( isBlackout ) prefix = ''
                             // Per-broadcast mediaId pins the URL to *this specific game's
                             // feed* — the previous team-keyed shape (`?team=KC&mediaType=Video`)
                             // resolved to "whatever's current/next for KC" and pointed at
@@ -3058,6 +3093,11 @@ class sessionClass {
                             if ( includeBlackouts == 'true' ) streamUrl += '&includeBlackouts=' + includeBlackouts
                             if ( this.protection.content_protect ) streamUrl += '&content_protect=' + this.protection.content_protect
 
+                            // Blackout: no playable link anywhere. Clearing streamUrl
+                            // suppresses the Watch:/Alternate: DESCRIPTION lines and the
+                            // LOCATION URL fallback (locationField becomes venue-only).
+                            if ( isBlackout ) streamUrl = ''
+
                             // Venue (stadium name) is the human-meaningful LOCATION field.
                             // Falls back to streamUrl when venue is unknown so the field is
                             // never empty and clients keep a clickable target.
@@ -3079,11 +3119,12 @@ class sessionClass {
                               d: calendar_start instanceof Date ? calendar_start.toISOString() : String(calendar_start),
                               e: calendar_stop instanceof Date ? calendar_stop.toISOString() : String(calendar_stop),
                               v: venue,
-                              u: streamUrl
+                              u: streamUrl,
+                              b: isBlackout
                             })
                             const seq = gamePk ? bumpSequence(gamePk, stateHash) : 0
                             if ( gamePk ) seqStateDirty = true
-                            calendar += await this.generate_ics_event(prefix, calendar_start, calendar_stop, subtitle, description, locationField, buildAltLoc(streamUrl), seq, uidOverride, streamUrl)
+                            calendar += await this.generate_ics_event(prefix, calendar_start, calendar_stop, subtitle, description, locationField, buildAltLoc(streamUrl), seq, uidOverride, streamUrl, !isBlackout)
 
                             // MLB guide XML
                             programs += await this.generate_xml_program(channelid, start, stop, title, description, icon, this.convertDateToAirDate(new Date(cache_data.dates[i].games[j].gameDate)), subtitle, seriesId, cache_data.dates[i].games[j].gamePk, away_team, home_team)
@@ -5840,7 +5881,7 @@ class sessionClass {
 (aDate.getUTCDate()<10? "0" + aDate.getUTCDate().toString():aDate.getUTCDate().toString()) + 'T' + (aDate.getUTCHours()<10? "0" + aDate.getUTCHours().toString():aDate.getUTCHours().toString()) + (aDate.getUTCMinutes()<10? "0" + aDate.getUTCMinutes().toString():aDate.getUTCMinutes().toString()) + '00Z';
   }
 
-  async generate_ics_event(prefix, start, stop, title, description, location, altLocation='', sequence=0, uidOverride='', streamUrl='') {
+  async generate_ics_event(prefix, start, stop, title, description, location, altLocation='', sequence=0, uidOverride='', streamUrl='', includeAlarm=true) {
     let ics_start = this.date_to_ics_format(start)
     // DESCRIPTION layout (literal \n is the ICS escape for a line break,
     // which compliant calendar clients render as a paragraph separator):
@@ -5873,7 +5914,10 @@ class sessionClass {
     // SEQUENCE is always emitted — RFC 5545 §3.8.7.4 defaults it to 0 when
     // absent, so emitting `SEQUENCE:0` is a no-op for default subscribers
     // and lets MLB callers signal lifecycle bumps without a schema split.
-    return "\n" + 'BEGIN:VEVENT' + "\n" + 'UID:' + uid + "\n" + 'DTSTAMP:' + this.date_to_ics_format(new Date()) + "\n" + 'SEQUENCE:' + sequence + "\n" + 'SUMMARY:' + summary + "\n" + 'DTSTART:' + ics_start + "\n" + 'DTEND:' + this.date_to_ics_format(stop) + "\n" + 'DESCRIPTION:' + desc + "\n" + 'LOCATION:' + location + "\n" + 'BEGIN:VALARM' + "\n" + 'ACTION:DISPLAY' + "\n" + 'DESCRIPTION:Reminder' + "\n" + 'TRIGGER:-PT0M' + "\n" + 'END:VALARM' + "\n" + 'END:VEVENT'
+    // Blackout events pass includeAlarm=false: nothing to watch on MLB.TV at
+    // first pitch, so no VALARM reminder. All other callers keep the alarm.
+    let alarm = includeAlarm ? ("\n" + 'BEGIN:VALARM' + "\n" + 'ACTION:DISPLAY' + "\n" + 'DESCRIPTION:Reminder' + "\n" + 'TRIGGER:-PT0M' + "\n" + 'END:VALARM') : ''
+    return "\n" + 'BEGIN:VEVENT' + "\n" + 'UID:' + uid + "\n" + 'DTSTAMP:' + this.date_to_ics_format(new Date()) + "\n" + 'SEQUENCE:' + sequence + "\n" + 'SUMMARY:' + summary + "\n" + 'DTSTART:' + ics_start + "\n" + 'DTEND:' + this.date_to_ics_format(stop) + "\n" + 'DESCRIPTION:' + desc + "\n" + 'LOCATION:' + location + alarm + "\n" + 'END:VEVENT'
   }
 
   async generate_xml_program(channelid, start, stop, title, description, icon, date, subtitle=false, teamId=false, gamePk=false, away_team=false, home_team=false) {
