@@ -516,7 +516,6 @@ h1 {
 }
 
 .videos {
-    width: 90px;
     min-height: 0.9rem;
     text-align: center;
     font-weight: bold;
@@ -530,6 +529,14 @@ h1 {
     align-items: center;
     gap: 5px;
     white-space: nowrap;
+}
+
+.regularButton {
+    width: 90px;
+}
+
+.shortButton {
+    width: 40px;
 }
 
 .videos a,
@@ -620,7 +627,6 @@ h1 {
 }
 
 .videosInactive {
-    width: 90px;
     min-height: 0.9rem;
     text-align: center;
     font-weight: bold;

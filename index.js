@@ -2494,6 +2494,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         let highlightLink = ''
         let condensedLink = ''
+        let recapLink = ''
 
         if ( cache_data.dates[0].games[j].doubleHeader != 'N'  ) {
           gameNo = cache_data.dates[0].games[j].gameNumber
@@ -2562,8 +2563,9 @@ document.addEventListener("DOMContentLoaded", function () {
         let fav_style = ''
         let freeGameVis = 'is-invisible'
         let favoritVis = 'is-invisible' 
-        let condensedCSS = 'videos'
-        let highlightCSS = 'videos'
+        let condensedCSS = 'videos shortButton'
+        let recapCSS = 'videos shortButton'
+        let highlightCSS = 'videos regularButton'
         
        if ( argv.free && cache_data.dates[0].games[j].broadcasts && cache_data.dates[0].games[j].broadcasts[0] && cache_data.dates[0].games[j].broadcasts[0].freeGame ) {
           freeGameVis = ''
@@ -2590,6 +2592,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         // Check if Winter League / MiLB game first
         if ( (cache_data.dates[0].games[j].teams['away'].team.sport.id != levels['MLB']) && (cache_data.dates[0].games[j].teams['home'].team.sport.id != levels['MLB']) && (mediaTypeTV == 'MLBTV') ) {
+          recapCSS = 'is-invisible'
           condensedCSS = 'is-invisible'
           highlightCSS = 'is-invisible'
           if ( cache_data.dates[0].games[j].broadcasts ) {
@@ -2874,7 +2877,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 gameDate +
                 '\'); return false;">Highlights</a>'
             } else { highlightLink += `Highlights`
-              highlightCSS = 'videosInactive'
+              highlightCSS = 'videosInactive regularButton'
              }
 
             if (mediaTypeTV == 'MLBTV' && abstractGameState == 'Final' && (detailedState != 'Postponed') ) {
@@ -2884,9 +2887,23 @@ document.addEventListener("DOMContentLoaded", function () {
                 cache_data.dates[0].games[j].gamePk +
                 '\',\'' +
                 gameDate +
-                '\'); return false;">Condensed</a>'
-            } else { condensedLink += `Condensed` 
-                     condensedCSS = 'videosInactive'}
+                '\'); return false;">Cond.</a>'
+            } else { condensedLink += `Cond.` 
+                     condensedCSS = 'videosInactive shortButton'}
+
+            if (mediaTypeTV == 'MLBTV' && abstractGameState == 'Final' && (detailedState != 'Postponed')) {
+              recapLink +=
+                '<a' +
+                ' href="#" onclick="showrecap(\'' +
+                cache_data.dates[0].games[j].gamePk +
+                '\',\'' +
+                gameDate +
+                '\'); return false;">Recap</a>'
+            } else {
+              recapLink += `Recap`
+              recapCSS = 'videosInactive shortButton'
+            }
+
           }
         }
               let pitcherVis = 'is-invisible'
@@ -2981,7 +2998,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
           <div class="streamContent">
             <span class="">${streamSource.homeTV}</span>
-            <span class="flex-center ${condensedCSS}">◆ ${condensedLink}</span>
+            <div class="flex-center">
+              <span class="flex-center ${recapCSS}">${recapLink}</span>
+              <span class="flex-center ${condensedCSS}">${condensedLink}</span>
+            </div>
           </div>
       
 
@@ -3428,36 +3448,40 @@ span.onclick = closeModal;`
 
     body += 'window.onclick = function(event) { if (event.target == modal) {closeModal()} }</script>' + "\n"
 
-    // Condensed game code
+    // Find recaps and condensed games from highlights
     body += `<script type="text/javascript">
 
-    function parseCondensed(responsetext) {
+    function parseHighlight(responsetext, keyword) {
       try {
         var highlights = JSON.parse(responsetext);
         var captions_parameter = '';
         if (captions == 'disabled') {
           captions_parameter = '&captions=disabled';
         }
-        var condensedExists = null;
+        var highlightExists = null;
         var hls_url = '';
         var mp4_url = '';
         if (highlights && (highlights.length > 0)) {
 
           for (var i = 0; i < highlights.length; i++) {
+            var keywordsAll = highlights[i].keywordsAll || [];
 
-            if (highlights[i].headline && highlights[i].headline.indexOf("Condensed Game") !== -1) {
-              condensedExists = highlights[i];
+            var hasKeyword = keywordsAll.some(function(item) {
+              return item && (item.value && item.value === keyword)
+                });
+            if (highlights[i].headline && hasKeyword) {
+              highlightExists = highlights[i];
               for (var j = 0; j < highlights[i].playbacks.length; j++) {
-                if (highlights[i].playbacks[j].name && (highlights[i].playbacks[j].name == 'HTTP_CLOUD_WIRED_60')) {
+                if (highlights[i].playbacks[j].name === 'HTTP_CLOUD_WIRED_60') {
                   hls_url = highlights[i].playbacks[j].url;
-                } else if (highlights[i].playbacks[j].name && (highlights[i].playbacks[j].name == 'mp4Avc')) {
+                } else if (highlights[i].playbacks[j].name === 'mp4Avc') {
                   mp4_url = highlights[i].playbacks[j].url;
                 }
               }
               break;
             }
           }
-            if (!condensedExists || !hls_url) {
+            if (!highlightExists || !hls_url) {
       toast();
       return;
     } { window.location.href = "` + link + `?highlight_src=" + encodeURIComponent(hls_url) + "&resolution=" + resolution + captions_parameter + "` + content_protect_b + `"; }
@@ -3470,9 +3494,22 @@ span.onclick = closeModal;`
       }
     }
 
+    function showHighlightByKeyword(gamePk, gameDate, keyword) {
+      makeGETRequest(
+        "` + http_root + `/highlights?gamePk=" + gamePk + "&gameDate=" + gameDate + "` + content_protect_b + `",
+        function(response) {
+          parseHighlight(response, keyword);
+        }
+      );
+      return false;
+    }
+
     function showcondensed(gamePk, gameDate) {
-      makeGETRequest("` + http_root + `/highlights?gamePk=" + gamePk + "&gameDate=" + gameDate + "` + content_protect_b + `", parseCondensed);
-      return false
+        return showHighlightByKeyword(gamePk, gameDate, 'MLBCOM_CONDENSED_GAME');
+      }
+
+      function showrecap(gamePk, gameDate) {
+        return showHighlightByKeyword(gamePk, gameDate, 'MLBCOM_GAME_RECAP');
     }
 
         </script>`
