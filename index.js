@@ -2566,6 +2566,7 @@ document.addEventListener("DOMContentLoaded", function () {
         let condensedCSS = 'videos shortButton'
         let recapCSS = 'videos shortButton'
         let highlightCSS = 'videos regularButton'
+        let backgroundCSS = 'backgroundRegular'
         
        if ( argv.free && cache_data.dates[0].games[j].broadcasts && cache_data.dates[0].games[j].broadcasts[0] && cache_data.dates[0].games[j].broadcasts[0].freeGame ) {
           freeGameVis = ''
@@ -2580,7 +2581,7 @@ document.addEventListener("DOMContentLoaded", function () {
           let color1 = hexToRgba(TEAM_COLORS[fav_team][1], 0.2)
           let color2 = hexToRgba(TEAM_COLORS[fav_team][0], 0)
           
-          fav_style = ' style="background-image: linear-gradient(' + '0deg, ' + color1 + ', ' + color2 + '); border: 1px solid #' + TEAM_COLORS[fav_team][1] + '!important;; border-style: outset; border-radius: 3px;"'
+          fav_style = ' style="background-image: linear-gradient(' + '0deg, ' + color1 + ', ' + color2 + '); border: 2px solid #' + TEAM_COLORS[fav_team][1] + '!important;; border-style: outset; border-radius: 3px;"'
         }
 
         let gameLevel = session.getLevelNameFromSportId(cache_data.dates[0].games[j].teams['home'].team.sport.id);
@@ -2776,11 +2777,6 @@ document.addEventListener("DOMContentLoaded", function () {
                         stationlink = '<a class="streamAction" href="' + thislink + querystring + '">' + station + '</a>'
 
                         let streamStationHtml = stationlink + prePostIndicator
-
-                        if ( blackouts[gamePk] && blackouts[gamePk].blackout_feeds && blackouts[gamePk].blackout_feeds.includes(broadcast.mediaId) ) {
-                          streamStationHtml = '<span class="blackout">' + stationlink + '</span>' + prePostIndicator
-                        }
-
                         let resumeStreamSuffix = ''
                         // For suspended games that are currently live, mark whether this feed is part 1 or part 2.
                         if ( resumeStatus == 'live' ) {
@@ -2847,6 +2843,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
                       if ( blackouts[gamePk] && blackouts[gamePk].blackout_feeds && blackouts[gamePk].blackout_feeds.includes(broadcast.mediaId) ) {
                         inactiveStation = '<span class="streamAction streamActionInactive blackoutstation">' + station + '</span>' + prePostIndicator
+                        backgroundCSS = 'backgroundBlackout'
                       } else {
                         inactiveStation = '<span class="streamAction streamActionInactive">' + station + '</span>' + prePostIndicator
                       }
@@ -2909,7 +2906,7 @@ document.addEventListener("DOMContentLoaded", function () {
               let pitcherVis = 'is-invisible'
               if (awayPitcher || homePitcher) { pitcherVis ='' }
             body +=`
-          <div class="cardContainer ${gameLevelClass}" ${fav_style}>
+          <div class="cardContainer ${backgroundCSS} ${gameLevelClass}" ${fav_style}>
 
             <div class="cardHeader flex-between">
               <div class="flex-between">
@@ -2933,7 +2930,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     </span>
                   </span>
                    <span class="tooltip ${blackoutVis}">
-                  <span class="tag blackout">BO
+                  <span class="tag blackout">BLACKOUT
                     <span class="tooltiptext">${blackoutType}
                       <span class="${blackoutToolTipVis}"> video blackout until approx. ${blackoutExpiry}</span>
                     </span>
@@ -2945,7 +2942,7 @@ document.addEventListener("DOMContentLoaded", function () {
                   </span>
                 </span>
                 <span class="tooltip ${favoritVis}">
-                  <span class="tag favorite">Fav
+                  <span class="tag favorite">FAV
                     <span class="tooltiptext">Favorite team</span>
                   </span>
                 </span>

@@ -115,7 +115,6 @@ h1 {
 }
 
 .cardContainer {
-    background-color: var(--color-panel);
     width: var(--card-width);
     display: grid;
     grid-template-rows: auto 1fr auto;
@@ -134,6 +133,16 @@ h1 {
 .cardContainer.level-a-plus,
 .cardContainer.level-winter {
     border-left: 2px solid var(--level-color) !important;
+}
+
+.backgroundRegular {
+    background-color: var(--color-panel);
+}
+
+.backgroundBlackout {
+    background-color: var(--color-panel);
+    opacity: 0.8;
+    background: repeating-linear-gradient(45deg, #f7446230 0, #f7446230 20px, var(--color-panel) 20px, var(--color-panel)40px);
 }
 
 .menuContainer {
