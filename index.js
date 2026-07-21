@@ -1248,6 +1248,7 @@ app.get('/gamechangerplaylist.m3u8', async function(req, res) {
             session.debuglog(game_changer_title + 'checking for new segments')
             let u = streamURL + '_' + GAMECHANGER_RESOLUTIONS[resolution].url_bandwidth + 'K.m3u8'
             headers['x-cdn-token'] = streamURLToken
+            headers.gzip = true
             requestRetry(u, headers, function(err, response) {
               session.debuglog(game_changer_title + 'requested ' + u)
               if (err) return res.error(err)
