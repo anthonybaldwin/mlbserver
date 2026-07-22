@@ -251,6 +251,24 @@ function corsMiddleware(req, res, next) {
 httpAttach(multiview_app, corsMiddleware)
 multiview_app.listen(multiview_port)
 
+// Listen for stylesheet requests
+app.get('/style.css', async function (req, res) {
+  if (!(await protect(req, res))) return
+
+  session.requestlog('style.css', req, true)
+
+  var body = await session.getCSS()
+
+  if (!body) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
+    res.end('style.css not found')
+    return
+  }
+
+  res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' })
+  res.end(body)
+})
+
 // Listen for clear cache requests
 app.get('/clearcache', async function(req, res) {
   if ( ! (await protect(req, res)) ) return
@@ -1473,7 +1491,7 @@ app.get('/login', async function(req, res) {
     const redirect = req.query.redirect || '/';
     const error = req.query.error ? '<p style="color:red;">Invalid username or password</p>' : '';
     res.writeHead(200, {'Content-Type': 'text/html'});
-    res.end(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Login - ${appname}</title><style>body{color:lightgray;background-color:black;font-family:Arial,Helvetica,sans-serif;}input{background-color:black;color:lightgray;border:1px solid lightgray;}button{background-color:black;color:lightgray;border:1px solid lightgray;}</style></head><body><h1>Login to ${appname}</h1>${error}<form method="POST" action="${http_root}/login"><input type="hidden" name="redirect" value="${redirect}"><p>Username: <input type="text" name="username" required></p><p>Password: <input type="password" name="password" required></p><p><button type="submit">Login</button></p></form></body></html>`);
+    res.end(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Login - ${appname}</title><style>html,body{background-color:#0e0e0e;color:LightGray;font-family:Verdana,Tahoma,Roboto,sans-serif}h1{margin:0;;color:goldenrod}button{color:#000;background-color:lightgray;min-width:3rem;border:none;padding:1px 5px 1px 5px;text-align:center;text-decoration:none;display:inline-block;font-size:.9rem;border-radius:4px;cursor:pointer;margin:2px}</style></head><body><h1>Login to ${appname}</h1>${error}<form method="POST" action="${http_root}/login"><input type="hidden" name="redirect" value="${redirect}"><p>Username: <input type="text" name="username" required></p><p>Password: <input type="password" name="password" required></p><p><button type="submit">Login</button></p></form></body></html>`);
   } catch (e) {
     session.log('login get request error : ' + e.message);
     res.end('login get request error, check log');
@@ -1644,6 +1662,7 @@ app.get('/', async function(req, res) {
     if ( req.query.mediaType ) {
       mediaType = req.query.mediaType
     }
+    var mediaTypeTV = mediaType
     var resolution = VALID_RESOLUTIONS[0]
     if ( req.query.resolution ) {
       resolution = req.query.resolution
@@ -1696,15 +1715,9 @@ app.get('/', async function(req, res) {
       content_protect_b = '&content_protect=' + content_protect
     }
 
-    var body = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="Content-type" content="text/html;charset=UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no"><title>' + appname + '</title><link rel="icon" href="favicon.svg' + content_protect_a + '"><style type="text/css">input[type=text],input[type=button]{-webkit-appearance:none;-webkit-border-radius:0}body{width:480px;color:lightgray;background-color:black;font-family:Arial,Helvetica,sans-serif;-webkit-text-size-adjust:none}a{color:darkgray}button{color:lightgray;background-color:black}button.default{color:black;background-color:lightgray}table{width:100%;pad}table,th,td{border:1px solid darkgray;border-collapse:collapse}th,td{padding:5px}.tinytext,textarea,input[type="number"]{font-size:.8em}textarea{width:380px}.freegame,.freegame a{color:green}.blackout,.blackout a{text-decoration:line-through}'
+    var body = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="Content-type" content="text/html;charset=UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no"><title>' + appname + '</title><link rel="icon" href="favicon.svg' + content_protect_a + '"><link rel="stylesheet" href="/style.css">'
 
-    // Highlights CSS
-    body += '.modal{display:none;position:fixed;z-index:1;left:0;top:0;width:100%;height:100%;overflow:hidden;background-color:rgb(0,0,0);background-color:rgba(0,0,0,0.4)}.modal-content{position:absolute;top:100px;bottom:20px;left:50%;transform:translateX(-50%);background-color:#fefefe;padding:10px;border:1px solid #888;width:360px;overflow-y:auto;color:black}#highlights{overflow-y:auto;}#highlights a{color:black}.close{color:black;float:right;font-size:28px;font-weight:bold;}#highlights a:hover,#highlights a:focus,.close:hover,.close:focus{color:gray;text-decoration:none;cursor:pointer;}'
-
-    // Tooltip CSS
-    body += '.tooltip{position:relative;display:inline-block;border-bottom: 1px dotted gray;}.tooltip .tooltiptext{font-size:.8em;visibility:hidden;width:360px;background-color:gray;color:white;text-align:left;padding:5px;border-radius:6px;position:absolute;z-index:1;top:100%;left:75%;margin-left:-30px;}.tooltip:hover .tooltiptext{visibility:visible;}'
-
-    body += '</style><script type="text/javascript">' + "\n";
+    body += '<script type="text/javascript">' + "\n";
 
     // Define option variables in page
     body += 'var date="' + gameDate + '";var level="' + level + '";var org="' + org + '";var mediaType="' + mediaType + '";var resolution="' + resolution + '";var audio_track="' + audio_track + '";var captions="' + captions + '";var force_vod="' + force_vod + '";var inning_half="' + inning_half + '";var inning_number="' + inning_number + '";var skip="' + skip + '";var skip_adjust="' + skip_adjust + '";var pad="' + pad + '";var linkType="' + linkType + '";var startFrom="' + startFrom + '";var scores="' + scores + '";var controls="' + controls + '";var scan_mode="' + scan_mode + '";var content_protect="' + content_protect + '";' + "\n"
@@ -1727,28 +1740,80 @@ app.get('/', async function(req, res) {
 		body += '</script></head><body><h1>' + appname + '</h1>' + "\n"
 
     if (argv.login_page) {
-      body += '<p><a href="' + http_root + '/logout">Logout</a></p>' + "\n"
+      body += '<p><form action="' + http_root + '/logout" method="GET"><button type="submit">Logout</button></form></p>' + "\n"
     }
-
-    body += '<p><span class="tooltip tinytext">Touch or hover over an option name for more details</span></p>' + "\n"
+    body +=`<div class="section">`
+    body += '<div class="menuContainer settingsContainer">'
+    body += '<div class="cardMenuHeader">Options</div>'
+    body += '<div class="menuContent settingsContent">'
 
     todayUTCHours -= 4
-    body += '<p><span class="tooltip">Date<span class="tooltiptext">"today" lasts until ' + todayUTCHours + ' AM EST. Home page will default to yesterday between ' + todayUTCHours + ' AM - ' + (YESTERDAY_UTC_HOURS - 4) + ' AM EST.</span></span>: <input type="date" id="gameDate" value="' + gameDate + '"/> '
+    const settingsInfoText = {
+      dateInfo: '"today" lasts until ' + todayUTCHours + ' AM EST. Home page will default to yesterday between ' + todayUTCHours + ' AM - ' + (YESTERDAY_UTC_HOURS - 4) + ' AM EST.',
+      levelInfo: 'Major or minor league level.',
+      orgInfo: 'Major league parent organization.',
+      mediaTypeInfo: 'Video is TV broadcasts, Audio is English radio, and Spanish is Spanish radio (not available for all games).',
+      linkTypeInfo: 'Embed will play in your browser (with AirPlay support), Stream will give you a stream URL to open directly in media players like Kodi or VLC, Chromecast is a desktop browser-based casting site, Advanced will play in your desktop browser with some extra tools and debugging information (Advanced may require you to disable insecure / mixed content blocking in your browser), and Download will prompt your browser to save the stream to a TS (Transport Stream) file.<br><br>NOTE: Chromecast may not be able to resolve local domain names; if so, you can simply access this page (and thus the streams) using an IP address instead.',
+      videoControlsInfo: 'Choose whether to show or hide controls on the embedded video page. Helpful to avoid timeline spoilers.',
+      startFromInfo: 'For the embedded player only: Beginning will start playback at the beginning of the stream (may be 1 hour before game time for live games), and Live will start at the live point (if the event is live -- archive games should always start at the beginning). You can still seek anywhere.',
+      inningInfo: 'For video streams only: choose the inning to start with (and the score to display, if applicable). Inning number is relative -- for example, selecting inning 7 here will show inning 7 for scheduled 9-inning games, but inning 5 for scheduled 7-inning games, for example. If an inning number is specified, seeking to an earlier point will not be possible. Default is the beginning of the stream. To use with radio, set the video track to "None".',
+      scoresInfo: 'Choose whether to show scores on this web page. Combine this with the inning option to only show scores through the specified inning.',
+      videoInfo: 'For video streams only: you can manually specifiy a video track (resolution) to use. Adaptive will let your client choose. Best will select either 1080p60 (MLB) or 720p60 (MiLB). 504p is default for multiview (see below).<br/><br/>None will allow to remove the video tracks, if you just want to listen to the audio while using the "start at inning" or "skip breaks" options enabled.',
+      audioInfo: 'For video streams only: you can manually specifiy which audio track to include. Some media players can accept them all and let you choose. Not all tracks are available for all games, and injected tracks may not work with skip options below.<br/><br/>If you select "none" for video above, picking an audio track here will make it an audio-only feed that supports the inning start and skip breaks options.',
+      captionsInfo: 'For video streams only: you can disable the caption track, if one is present. This is handy if you do not want to disable it in your player each time.',
+      skipInfo: 'For video streams only (use the video "none" option above to apply it to audio streams): you can remove all breaks, idle time, non-action pitches, or only commercial breaks from the stream (useful to make your own "condensed games").<br/><br/>NOTES: skip timings are only generated when the stream is loaded -- so for live games, it will only skip up to the time you loaded the stream. Also, commercial skip will not work on pre-2024 games, or on MiLB games -- use skip breaks instead.',
+      skipAdjustInfo: 'Seconds to adjust the skip time video segments, if necessary. Try a negative number if the plays are ending before the video segments begin; use a positive number if the video segments are ending before the play happens.',
+      padInfo: 'You can pad archive streams with random extra time at the end, to help conceal timeline spoilers.',
+      forceVodInfo: 'For streams only: if your client does not support seeking in mlbserver live streams, turning this on will make the stream look like a VOD stream instead, allowing the client to start at the beginning and allowing the user to seek within it. You will need to reload the stream to watch/view past the current time, though.'
+    }
+
+    function settingInfoLabel(label, id) {
+      return '<div class="settingLabel is-flex"><span>' + label + '</span><span class="info infoPadding" data-target="#' + id + '">?</span></div>'
+    }
+
+    function settingInlineInfoLabel(label, id) {
+      return '<span class="settingInlineLabel is-flex"><span>' + label + '</span><span class="info infoPadding" data-target="#' + id + '">?</span></span>'
+    }
+
+    function settingInfo(id) {
+      return '<div id="' + id + '" class="infoContainer"><div class="infoContent">' + settingsInfoText[id] + '</div></div>'
+    }
+
+    body += '<div class="settingsGroup">'
+    body += '<div class="settingRow">' + settingInfoLabel('Date', 'dateInfo') + '<div class="settingControl"><input type="date" id="gameDate" value="' + gameDate + '"/> '
     for (var i = 0; i < VALID_DATES.length; i++) {
       body += '<button '
       if ( ((VALID_DATES[i] == VALID_DATES[0]) && (gameDate == today)) || ((VALID_DATES[i] == VALID_DATES[1]) && (gameDate == yesterday)) ) body += 'class="default" '
       body += 'onclick="date=\'' + VALID_DATES[i] + '\';reload()">' + VALID_DATES[i] + '</button> '
     }
-    body += '</p>' + "\n" + '<p><span class="tinytext">Updated ' + session.getCacheUpdatedDate(cache_name) + '</span></p>' + "\n"
+    body += '</div></div>' + "\n" + settingInfo('dateInfo') + '<div class="settingsMeta"><span>Updated ' + session.getCacheUpdatedDate(cache_name) + '</span></div>' + "\n"
 
-    body += '<p><span class="tooltip">Level<span class="tooltiptext">Major or minor league level</span></span>: '
+    body += '<div class="settingRow">' + settingInfoLabel('Score', 'scoresInfo') + '<div class="settingControl">'
+    for (var i = 0; i < VALID_SCORES.length; i++) {
+      body += '<button '
+      if ( scores == VALID_SCORES[i] ) body += 'class="default" '
+      body += 'onclick="scores=\'' + VALID_SCORES[i] + '\';reload()">' + VALID_SCORES[i] + '</button> '
+    }
+    body += '</div></div>' + settingInfo('scoresInfo')
+
+    body += '<div class="settingRow">' + settingInfoLabel('Media Type', 'mediaTypeInfo') + '<div class="settingControl">'
+    for (var i = 0; i < VALID_MEDIA_TYPES.length; i++) {
+      body += '<button '
+      if ( mediaType == VALID_MEDIA_TYPES[i] ) body += 'class="default" '
+      body += 'onclick="mediaType=\'' + VALID_MEDIA_TYPES[i] + '\';reload()">' + VALID_MEDIA_TYPES[i] + '</button> '
+    }
+    body += '</div></div>' + "\n" + settingInfo('mediaTypeInfo')
+
+    body += '<details class="settingsDisclosure"><summary>Show more filters</summary><div class="settingsDisclosureContent">'
+    body += '<div class="settingRow">' + settingInfoLabel('Level', 'levelInfo') + '<div class="settingControl">'
     for (const [key, value] of Object.entries(levels)) {
       body += '<button '
       if ( level == key ) body += 'class="default" '
       body += 'onclick="org=\'' + default_org + '\';level=\'' + key + '\';reload()">' + key + '</button> '
     }
 
-    body += ' or <span class="tooltip">Org<span class="tooltiptext">Major league parent organization</span></span>: '
+    body += '<span class="settingsDivider">or</span>'
+    body += settingInlineInfoLabel('Org', 'orgInfo') + ' '
     body += '<select id="org" onchange="level=\'' + default_org + '\';org=this.value;reload()">'
     body += '<option value="' + default_org + '">' + default_org + '</option>'
     var orgs = session.getOrgs()
@@ -1757,48 +1822,22 @@ app.get('/', async function(req, res) {
       if ( org == orgs[i] ) body += ' selected'
       body += '>' + orgs[i] + '</option> '
     }
-    body += '</select></p>' + "\n"
+    body += '</select></div></div>' + settingInfo('levelInfo') + settingInfo('orgInfo') + '</div></details></div>' + "\n"
 
-    body += '<p><span class="tooltip">Media Type<span class="tooltiptext">Video is TV broadcasts, Audio is English radio, and Spanish is Spanish radio (not available for all games).</span></span>: '
-    for (var i = 0; i < VALID_MEDIA_TYPES.length; i++) {
-      body += '<button '
-      if ( mediaType == VALID_MEDIA_TYPES[i] ) body += 'class="default" '
-      body += 'onclick="mediaType=\'' + VALID_MEDIA_TYPES[i] + '\';reload()">' + VALID_MEDIA_TYPES[i] + '</button> '
-    }
-    body += '</p>' + "\n"
+    body += '<div class="settingsGroup">'
 
-    body += '<p><span class="tooltip">Link Type<span class="tooltiptext">Embed will play in your browser (with AirPlay support), Stream will give you a stream URL to open directly in media players like Kodi or VLC, Chromecast is a desktop browser-based casting site, Advanced will play in your desktop browser with some extra tools and debugging information (Advanced may require you to disable insecure / mixed content blocking in your browser), and Download will prompt your browser to save the stream to a TS (Transport Stream) file.<br><br>NOTE: Chromecast may not be able to resolve local domain names; if so, you can simply access this page (and thus the streams) using an IP address instead.</span></span>: '
-    for (var i = 0; i < VALID_LINK_TYPES.length; i++) {
-      body += '<button '
-      if ( linkType == VALID_LINK_TYPES[i] ) body += 'class="default" '
-      body += 'onclick="linkType=\'' + VALID_LINK_TYPES[i] + '\';reload()">' + VALID_LINK_TYPES[i] + '</button> '
-    }
-    body += '</p>' + "\n"
-
-    body += '<p>'
     if ( linkType == VALID_LINK_TYPES[0] ) {
-      body += '<span class="tooltip">Video Controls<span class="tooltiptext">Choose whether to show or hide controls on the embedded video page. Helpful to avoid timeline spoilers.</span></span>: '
-      for (var i = 0; i < VALID_CONTROLS.length; i++) {
-        body += '<button '
-        if ( controls == VALID_CONTROLS[i] ) body += 'class="default" '
-        body += 'onclick="controls=\'' + VALID_CONTROLS[i] + '\';reload()">' + VALID_CONTROLS[i] + '</button> '
-      }
-      body += '</p>' + "\n"
-
-      body += '<p><span class="tooltip">Start From<span class="tooltiptext">For the embedded player only: Beginning will start playback at the beginning of the stream (may be 1 hour before game time for live games), and Live will start at the live point (if the event is live -- archive games should always start at the beginning). You can still seek anywhere.</span></span>: '
+      body += '<div class="settingRow">' + settingInfoLabel('Start From', 'startFromInfo') + '<div class="settingControl">'
       for (var i = 0; i < VALID_START_FROM.length; i++) {
         body += '<button '
         if ( startFrom == VALID_START_FROM[i] ) body += 'class="default" '
         body += 'onclick="startFrom=\'' + VALID_START_FROM[i] + '\';reload()">' + VALID_START_FROM[i] + '</button> '
       }
-      body += "\n"
-      if ( mediaType == VALID_MEDIA_TYPES[0] ) {
-        body += 'or '
-      }
+      body += '</div></div>' + settingInfo('startFromInfo')
     }
 
     if ( mediaType == VALID_MEDIA_TYPES[0] ) {
-      body += '<span class="tooltip">Inning<span class="tooltiptext">For video streams only: choose the inning to start with (and the score to display, if applicable). Inning number is relative -- for example, selecting inning 7 here will show inning 7 for scheduled 9-inning games, but inning 5 for scheduled 7-inning games, for example. If an inning number is specified, seeking to an earlier point will not be possible. Default is the beginning of the stream. To use with radio, set the video track to "None".</span></span>: '
+      body += '<div class="settingRow">' + settingInfoLabel('Inning', 'inningInfo') + '<div class="settingControl">'
       body += '<select id="inning_half" onchange="inning_half=this.value;reload()">'
       for (var i = 0; i < VALID_INNING_HALF.length; i++) {
         body += '<option value="' + VALID_INNING_HALF[i] + '"'
@@ -1816,23 +1855,119 @@ app.get('/', async function(req, res) {
       }
       body += '</select>'
     }
-    body += '</p>' + "\n"
-
-    body += '<p><span class="tooltip">Scores<span class="tooltiptext">Choose whether to show scores on this web page. Combine this with the inning option to only show scores through the specified inning.</span></span>: '
-    for (var i = 0; i < VALID_SCORES.length; i++) {
-      body += '<button '
-      if ( scores == VALID_SCORES[i] ) body += 'class="default" '
-      body += 'onclick="scores=\'' + VALID_SCORES[i] + '\';reload()">' + VALID_SCORES[i] + '</button> '
+    if ( mediaType == VALID_MEDIA_TYPES[0] ) {
+      body += '</div></div>' + "\n"
+      body += settingInfo('inningInfo')
     }
-    body += '</p>' + "\n"
 
-    body += "<table>" + "\n"
+    body += '<details class="settingsDisclosure"><summary>Show more stream options</summary><div class="settingsDisclosureContent">'
+
+    body += '<div class="settingRow">' + settingInfoLabel('Link Type', 'linkTypeInfo') + '<div class="settingControl">'
+    for (var i = 0; i < VALID_LINK_TYPES.length; i++) {
+      body += '<button '
+      if ( linkType == VALID_LINK_TYPES[i] ) body += 'class="default" '
+      body += 'onclick="linkType=\'' + VALID_LINK_TYPES[i] + '\';reload()">' + VALID_LINK_TYPES[i] + '</button> '
+    }
+    body += '</div></div>' + "\n" + settingInfo('linkTypeInfo')
+
+    if ( linkType == VALID_LINK_TYPES[0] ) {
+      body += '<div class="settingRow">' + settingInfoLabel('Video Controls', 'videoControlsInfo') + '<div class="settingControl">'
+      for (var i = 0; i < VALID_CONTROLS.length; i++) {
+        body += '<button '
+        if ( controls == VALID_CONTROLS[i] ) body += 'class="default" '
+        body += 'onclick="controls=\'' + VALID_CONTROLS[i] + '\';reload()">' + VALID_CONTROLS[i] + '</button> '
+      }
+      body += '</div></div>' + "\n" + settingInfo('videoControlsInfo')
+    }
+
+    if ( mediaType == VALID_MEDIA_TYPES[0] ) {
+        body += '<div class="settingRow">' + settingInfoLabel('Video', 'videoInfo') + '<div class="settingControl">'
+        body += '<button '
+        if ( resolution == 'best' ) body += 'class="default" '
+        body += 'onclick="resolution=\'best\';reload()">best</button> '
+        for (var i = 0; i < VALID_RESOLUTIONS.length; i++) {
+          body += '<button '
+          if ( resolution == VALID_RESOLUTIONS[i] ) body += 'class="default" '
+          body += 'onclick="resolution=\'' + VALID_RESOLUTIONS[i] + '\';reload()">' + VALID_RESOLUTIONS[i]
+          if ( DISPLAY_BANDWIDTHS[i] != '' ) {
+            body += '<br/><span>' + DISPLAY_BANDWIDTHS[i] + '</span>'
+          }
+          body += '</button> '
+        }
+        body += '</div></div>' + settingInfo('videoInfo')
+
+        body += '<div class="settingRow">' + settingInfoLabel('Audio', 'audioInfo') + '<div class="settingControl">'
+        for (var i = 0; i < VALID_AUDIO_TRACKS.length; i++) {
+          body += '<button '
+          if ( audio_track == VALID_AUDIO_TRACKS[i] ) body += 'class="default" '
+          body += 'onclick="audio_track=\'' + VALID_AUDIO_TRACKS[i] + '\';reload()">' + DISPLAY_AUDIO_TRACKS[i] + '</button> '
+        }
+        body += '</div></div>' + "\n" + settingInfo('audioInfo')
+
+        body += '<div class="settingRow">' + settingInfoLabel('Captions', 'captionsInfo') + '<div class="settingControl">'
+        for (var i = 0; i < VALID_CAPTIONS.length; i++) {
+          body += '<button '
+          if ( captions == VALID_CAPTIONS[i] ) body += 'class="default" '
+          body += 'onclick="captions=\'' + VALID_CAPTIONS[i] + '\';reload()">' + VALID_CAPTIONS[i] + '</button> '
+        }
+        body += '</div></div>' + settingInfo('captionsInfo')
+
+        body += '<div class="settingRow">' + settingInfoLabel('Skip', 'skipInfo') + '<div class="settingControl">'
+        for (var i = 0; i < VALID_SKIP.length; i++) {
+          body += '<button '
+          if ( skip == VALID_SKIP[i] ) body += 'class="default" '
+          body += 'onclick="skip=\'' + VALID_SKIP[i] + '\';reload()">' + VALID_SKIP[i] + '</button> '
+        }
+        if ( skip != VALID_SKIP[0] ) {
+          body += settingInlineInfoLabel('Skip Adjust', 'skipAdjustInfo') + ' <input type="number" id="skip_adjust" value="' + skip_adjust + '" step="1" onchange="setTimeout(function(){skip_adjust=document.getElementById(\'skip_adjust\').value;reload()},750)" onblur="skip_adjust=this.value;reload()" style="vertical-align:top;font-size:.8em;width:3em"/>'
+        }
+        body += '</div></div>' + "\n" + settingInfo('skipInfo')
+        if ( skip != VALID_SKIP[0] ) body += settingInfo('skipAdjustInfo')
+      }
+
+      body += '<div class="settingRow">' + settingInfoLabel('Pad', 'padInfo') + '<div class="settingControl">'
+      for (var i = 0; i < VALID_PAD.length; i++) {
+        body += '<button '
+        if ( pad == VALID_PAD[i] ) body += 'class="default" '
+        body += 'onclick="pad=\'' + VALID_PAD[i] + '\';reload()">' + VALID_PAD[i] + '</button> '
+      }
+      body += '</div></div>' + "\n" + settingInfo('padInfo')
+
+      if ( (linkType == VALID_LINK_TYPES[1]) && (gameDate == today) ) {
+        body += '<div class="settingRow">' + settingInfoLabel('VOD', 'forceVodInfo') + '<div class="settingControl">'
+        for (var i = 0; i < VALID_FORCE_VOD.length; i++) {
+          body += '<button '
+          if ( force_vod == VALID_FORCE_VOD[i] ) body += 'class="default" '
+          body += 'onclick="force_vod=\'' + VALID_FORCE_VOD[i] + '\';reload()">' + VALID_FORCE_VOD[i] + '</button> '
+        }
+        body += '<span>(if client does not support seeking in live streams)</span></div></div>' + "\n" + settingInfo('forceVodInfo')
+      }
+
+    body += '</div></details></div></div></div></div>'
+
+    const subscriptionInfoText = {
+      masn: 'MASN live stream for entitled subscribers. <a href="https://support.mlb.com/s/article/MASN-In-Market-Offering">See here for more information</a>.',
+      mlbn: 'MLB Network live stream is now available in the USA for paid MLBTV subscribers or as a paid add-on, in addition to authenticated TV subscribers. <a href="https://support.mlb.com/s/article/MLB-Network-Streaming-FAQ">See here for more information</a>.',
+      snla: 'SNLA live stream for entitled subscribers. <a href="https://support.mlb.com/s/article/SNLA-Plus-Subscription-Packages">See here for more information</a>.',
+      sny: 'SNY live stream for entitled subscribers. <a href="https://support.mlb.com/s/article/SNY-In-Market-Offering">See here for more information</a>.',
+      bigInning: 'Big Inning is the live look-in and highlights show. <a href="https://support.mlb.com/s/article/What-Is-MLB-Big-Inning">See here for more information</a>.',
+      gameChanger: 'The game changer stream will automatically switch between the highest leverage active live non-blackout games, and should be available whenever there are such games available. Does not support adaptive bitrate switching, will default to 720p60 resolution if not specified.',
+      streamFinder: 'The stream finder stream will automatically switch between games according to your uploaded preferences. This stream is not affiliated with Baseball Reference, do not contact them for support. Visit <a href="http://bit.ly/bbrefsf">http://bit.ly/bbrefsf</a> to create and export your preferences, then upload and save them to mlbserver <a href="#streamfinder">below</a>. Does not support adaptive bitrate switching, will default to 720p60 resolution if not specified.'
+    }
+
+    function subscriptionInfoLabel(label, id) {
+      return '<span class="subscriptionLabel"><span>' + label + '</span><span class="info infoPadding" data-target="#' + id + '">?</span></span>'
+    }
+
+    function subscriptionInfo(id, textKey) {
+      return '<div id="' + id + '" class="infoContainer subscriptionInfoContainer"><div class="infoContent">' + subscriptionInfoText[textKey] + '</div></div>'
+    }
 
     // Rename some parameters before display links
     var mediaFeedType = 'mediaFeedType'
     var language = 'en'
     if ( mediaType == VALID_MEDIA_TYPES[0] ) {
-      mediaType = 'MLBTV'
+      mediaTypeTV = 'MLBTV'
     } else if ( mediaType == VALID_MEDIA_TYPES[2] ) {
       //mediaType = VALID_MEDIA_TYPES[1]
       language = 'es'
@@ -1858,10 +1993,107 @@ app.get('/', async function(req, res) {
 
     let entitlements = await session.getEntitlements()
 
+    body += `<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var infoButtons = document.getElementsByClassName("info");
+
+  for (var i = 0; i < infoButtons.length; i++) {
+    infoButtons[i].addEventListener("click", function () {
+      var target = this.getAttribute("data-target");
+
+      if (!target) {
+        return;
+      }
+
+      var content = document.querySelector(target);
+
+      if (!content) {
+        return;
+      }
+
+      this.classList.toggle("active");
+
+      if (content.style.maxHeight) {
+        content.style.maxHeight = null;
+      } else {
+        content.style.maxHeight = content.scrollHeight + "px";
+      }
+    });
+  }
+
+  var closeButtons = document.getElementsByClassName("infoClose");
+
+  for (var j = 0; j < closeButtons.length; j++) {
+    closeButtons[j].addEventListener("click", function () {
+      var target = this.getAttribute("data-target");
+
+      if (!target) {
+        return;
+      }
+
+      var content = document.querySelector(target);
+
+      if (!content) {
+        return;
+      }
+
+      content.style.maxHeight = null;
+
+      var opener = document.querySelector('.info[data-target="' + target + '"]');
+
+      if (opener) {
+        opener.classList.remove("active");
+      }
+    });
+  }
+});
+  </script>`
+
+
+    let entitledMASN = (entitlements.includes('MASN_110'))
+
+    let entitledMLBN = (entitlements.includes('MLBN') || entitlements.includes('EXECMLB') || entitlements.includes('MLBTVMLBNADOBEPASS'))
+
+    let entitledSNLA = (entitlements.includes('SNLA_119'))
+
+    let entitledSNY = (entitlements.includes('SNY_121'))
+
+    let entitledBigInning = ( (entitlements.length > 0) && cache_data.dates && cache_data.dates[0] && (cache_data.dates[0].date >= today) && cache_data.dates[0].games && (cache_data.dates[0].games.length > 1) && cache_data.dates[0].games[0] && (cache_data.dates[0].games[0].seriesDescription == 'Regular Season') )
+
+    let entitledChangerFinder = ((gameDate >= today) && cache_data.dates && cache_data.dates[0] && cache_data.dates[0].games && (cache_data.dates[0].games.length > 1))
+
+    let hasEntitledStreams = entitledMASN || entitledMLBN || entitledSNLA || entitledSNY || entitledBigInning || entitledChangerFinder
+       
+    let subscriptionCardVis
+    if (hasEntitledStreams) {subscriptionCardVis = ''} else {subscriptionCardVis ='is-invisible'}
+
+
+    body += `<script>
+        function toast() {
+        var x = document.getElementById("snackbar");
+        x.className = "show";
+        setTimeout(function(){ x.className = x.className.replace("show", ""); }, 3000);
+      } 
+  </script>`
+    body +=`<div class="section">`
+    body += `<div class="cardContainer ${subscriptionCardVis}">
+                <div class="cardHeader flex-between">
+                  <div class="">
+                    <span class="time">Subscription streams</span>
+                  </div>
+              </div>
+              <div class="gameContent space-around">
+                <div class="prePostLegend">
+                  <span><span class="prePostIndicator prePostLegendIndicator" title="Pregame show"><span class="prePostCircle prePostCircleActive"></span><span class="prePostCircle prePostCircleInactive"></span></span>Pregame show</span>
+                  <span><span class="prePostIndicator prePostLegendIndicator" title="Postgame show"><span class="prePostCircle prePostCircleInactive"></span><span class="prePostCircle prePostCircleActive"></span></span>Postgame show</span>
+                </div>`
+
+    
+
     // MASN live stream for entitled subscribers
     try {
-        if ( entitlements.includes('MASN_110') ) {
-          body += '<tr><td><span class="tooltip">MASN<span class="tooltiptext">MASN live stream for entitled subscribers. <a href="https://support.mlb.com/s/article/MASN-In-Market-Offering">See here for more information</a>.</span></span></td><td>'
+        if ( entitledMASN ) {
+          body += '<div class="flex-between subscriptionStream">' + subscriptionInfoLabel('MASN', 'masnInfo')
           let querystring = '?event=MASN'
           let multiviewquerystring = querystring + '&resolution=' + DEFAULT_MULTIVIEW_RESOLUTION
           if ( linkType == VALID_LINK_TYPES[0] ) {
@@ -1876,9 +2108,10 @@ app.get('/', async function(req, res) {
           }
           querystring += content_protect_b
           multiviewquerystring += content_protect_b
-          body += '<a href="' + thislink + querystring + '">MASN</a>'
-          body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + '/stream.m3u8' + multiviewquerystring + '" onclick="addmultiview(this)">'
-          body += '</td></tr>' + "\n"
+          body += '<span><a href="' + thislink + querystring + '">MASN</a>'
+          body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + '/stream.m3u8' + multiviewquerystring + '" onclick="addmultiview(this)"></span>'
+          body += '</div>' + "\n"
+          body += subscriptionInfo('masnInfo', 'masn')
         } // end entitlements check
     } catch (e) {
       session.debuglog('MASN detect error : ' + e.message)
@@ -1886,8 +2119,8 @@ app.get('/', async function(req, res) {
     
     // MLB Network live stream for eligible USA subscribers
     try {
-        if ( entitlements.includes('MLBN') || entitlements.includes('EXECMLB') || entitlements.includes('MLBTVMLBNADOBEPASS') ) {
-          body += '<tr><td><span class="tooltip">MLB Network<span class="tooltiptext">MLB Network live stream is now available in the USA for paid MLBTV subscribers or as a paid add-on, in addition to authenticated TV subscribers. <a href="https://support.mlb.com/s/article/MLB-Network-Streaming-FAQ">See here for more information</a>.</span></span></td><td>'
+        if ( entitledMLBN || entitlements.includes('EXECMLB') || entitlements.includes('MLBTVMLBNADOBEPASS') ) {
+          body += '<div class="flex-between subscriptionStream">' + subscriptionInfoLabel('MLB Network', 'mlbnInfo')
           let querystring = '?event=MLBN'
           let multiviewquerystring = querystring + '&resolution=' + DEFAULT_MULTIVIEW_RESOLUTION
           if ( linkType == VALID_LINK_TYPES[0] ) {
@@ -1902,9 +2135,10 @@ app.get('/', async function(req, res) {
           }
           querystring += content_protect_b
           multiviewquerystring += content_protect_b
-          body += '<a href="' + thislink + querystring + '">MLB Network</a>'
-          body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + '/stream.m3u8' + multiviewquerystring + '" onclick="addmultiview(this)">'
-          body += '</td></tr>' + "\n"
+          body += '<span><a href="' + thislink + querystring + '">MLB Network</a>'
+          body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + '/stream.m3u8' + multiviewquerystring + '" onclick="addmultiview(this)"></span>'
+          body += '</div>' + "\n"
+          body += subscriptionInfo('mlbnInfo', 'mlbn')
         } // end entitlements check
     } catch (e) {
       session.debuglog('MLB Network detect error : ' + e.message)
@@ -1912,8 +2146,8 @@ app.get('/', async function(req, res) {
 
     // SNLA live stream for entitled subscribers
     try {
-        if ( entitlements.includes('SNLA_119') ) {
-          body += '<tr><td><span class="tooltip">SportsNet LA<span class="tooltiptext">SNLA live stream for entitled subscribers. <a href="https://support.mlb.com/s/article/SNLA-Plus-Subscription-Packages">See here for more information</a>.</span></span></td><td>'
+        if ( entitledSNLA ) {
+          body += '<div class="flex-between subscriptionStream">' + subscriptionInfoLabel('SportsNet LA', 'snlaInfo')
           let querystring = '?event=SNLA'
           let multiviewquerystring = querystring + '&resolution=' + DEFAULT_MULTIVIEW_RESOLUTION
           if ( linkType == VALID_LINK_TYPES[0] ) {
@@ -1928,9 +2162,10 @@ app.get('/', async function(req, res) {
           }
           querystring += content_protect_b
           multiviewquerystring += content_protect_b
-          body += '<a href="' + thislink + querystring + '">SNLA</a>'
-          body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + '/stream.m3u8' + multiviewquerystring + '" onclick="addmultiview(this)">'
-          body += '</td></tr>' + "\n"
+          body += '<span><a href="' + thislink + querystring + '">SNLA</a>'
+          body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + '/stream.m3u8' + multiviewquerystring + '" onclick="addmultiview(this)"></span>'
+          body += '</div>' + "\n"
+          body += subscriptionInfo('snlaInfo', 'snla')
         } // end entitlements check
     } catch (e) {
       session.debuglog('SNLA detect error : ' + e.message)
@@ -1938,8 +2173,8 @@ app.get('/', async function(req, res) {
 
     // SNY live stream for entitled subscribers
     try {
-        if ( entitlements.includes('SNY_121') ) {
-          body += '<tr><td><span class="tooltip">SNY<span class="tooltiptext">SNY live stream for entitled subscribers. <a href="https://support.mlb.com/s/article/SNY-In-Market-Offering">See here for more information</a>.</span></span></td><td>'
+        if ( entitledSNY ) {
+          body += '<div class="flex-between subscriptionStream">' + subscriptionInfoLabel('SNY', 'snyInfo')
           let querystring = '?event=SNY'
           let multiviewquerystring = querystring + '&resolution=' + DEFAULT_MULTIVIEW_RESOLUTION
           if ( linkType == VALID_LINK_TYPES[0] ) {
@@ -1954,9 +2189,10 @@ app.get('/', async function(req, res) {
           }
           querystring += content_protect_b
           multiviewquerystring += content_protect_b
-          body += '<a href="' + thislink + querystring + '">SNY</a>'
-          body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + '/stream.m3u8' + multiviewquerystring + '" onclick="addmultiview(this)">'
-          body += '</td></tr>' + "\n"
+          body += '<span><a href="' + thislink + querystring + '">SNY</a>'
+          body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + '/stream.m3u8' + multiviewquerystring + '" onclick="addmultiview(this)"></span>'
+          body += '</div>' + "\n"
+          body += subscriptionInfo('snyInfo', 'sny')
         } // end entitlements check
     } catch (e) {
       session.debuglog('SNY detect error : ' + e.message)
@@ -1969,7 +2205,7 @@ app.get('/', async function(req, res) {
       }
     }
 
-    if ( (mediaType == 'MLBTV') && ((level_ids == levels['MLB']) || level_ids.startsWith(levels['MLB'] + ',')) ) {
+    if ( (mediaTypeTV == 'MLBTV') && ((level_ids == levels['MLB']) || level_ids.startsWith(levels['MLB'] + ',')) ) {
       // Recap Rundown beginning in 2023, disabled because it stopped working
       /*if ( (gameDate <= yesterday) && (gameDate >= '2023-03-31') && cache_data.dates && cache_data.dates[0] && cache_data.dates[0].games && (cache_data.dates[0].games.length > 0) ) {
         body += '<tr><td><span class="tooltip">VOD<span class="tooltiptext">Recap Rundown plays all of a day\'s recaps in order.</span></span></td><td>'
@@ -1986,14 +2222,16 @@ app.get('/', async function(req, res) {
 
       // Big Inning
       var big_inning
-      if ( (entitlements.length > 0) && cache_data.dates && cache_data.dates[0] && (cache_data.dates[0].date >= today) && cache_data.dates[0].games && (cache_data.dates[0].games.length > 1) && cache_data.dates[0].games[0] && (cache_data.dates[0].games[0].seriesDescription == 'Regular Season') ) {
+      if ( entitledBigInning ) {
         // Scraped Big Inning schedule
         big_inning = await session.getBigInningSchedule(gameDate)
       }
       if ( big_inning ) {
+        let bigInningRendered = false
         for (var i = 0; i < big_inning.length; i++) {
-          if ( big_inning[i].start ) {
-            body += '<tr><td><span class="tooltip">' + new Date(big_inning[i].start).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + ' - ' + new Date(big_inning[i].end).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + '<span class="tooltiptext">Big Inning is the live look-in and highlights show. <a href="https://support.mlb.com/s/article/What-Is-MLB-Big-Inning">See here for more information</a>.</span></span></td><td>'
+          if ( big_inning[i].start && !bigInningRendered ) {
+            body += '<div class="flex-between subscriptionStream">' + "\n"
+            body += '<span class="tinytext">' + new Date(big_inning[i].start).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + ' - ' + new Date(big_inning[i].end).toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + '</span>'
             let compareStart = new Date(big_inning[i].start)
             compareStart.setMinutes(compareStart.getMinutes()-10)
             let compareEnd = new Date(big_inning[i].end)
@@ -2013,18 +2251,20 @@ app.get('/', async function(req, res) {
               }
               querystring += content_protect_b
               multiviewquerystring += content_protect_b
-              body += '<a href="' + thislink + querystring + '">Big Inning</a>'
-              body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + '/stream.m3u8' + multiviewquerystring + '" onclick="addmultiview(this)">'
+              body += '<span>' + subscriptionInfoLabel('<a href="' + thislink + querystring + '">Big Inning</a>', 'bigInningInfo')
+              body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + '/stream.m3u8' + multiviewquerystring + '" onclick="addmultiview(this)"></span>'
             } else {
-              body += 'Big Inning'
+              body += subscriptionInfoLabel('Big Inning', 'bigInningInfo')
             }
-            body += '</td></tr>' + "\n"
+            body += '</div>' + "\n"
+            body += subscriptionInfo('bigInningInfo', 'bigInning')
+            bigInningRendered = true
           }
         }
       }
-
+      
       // Game Changer and Stream Finder
-      if ( (gameDate >= today) && cache_data.dates && cache_data.dates[0] && cache_data.dates[0].games && (cache_data.dates[0].games.length > 1) ) {
+      if ( entitledChangerFinder ) {
         let gameIndexes = await session.get_first_and_last_games(cache_data.dates[0].games, blackouts)
         if ( (typeof gameIndexes.firstGameIndex !== 'undefined') && (typeof gameIndexes.lastGameIndex !== 'undefined') && (gameIndexes.firstGameIndex !== gameIndexes.lastGameIndex) ) {
           let compareStart = new Date(cache_data.dates[0].games[gameIndexes.firstGameIndex].gameDate)
@@ -2034,7 +2274,8 @@ app.get('/', async function(req, res) {
             compareEnd.setHours(compareEnd.getHours()+4)
           }
           compareEnd.setHours(compareEnd.getHours()+4)
-          body += '<tr><td><span class="tooltip">' + compareStart.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + ' - ' + compareEnd.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + '<span class="tooltiptext">The game changer stream will automatically switch between the highest leverage active live non-blackout games, and should be available whenever there are such games available. Does not support adaptive bitrate switching, will default to 720p60 resolution if not specified.</span></span></td><td>'
+          body += '<div class="flex-between subscriptionStream">' + "\n"
+          body += '<span class="tinytext">' + compareStart.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + ' - ' + compareEnd.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + '</span>'
           if ( (currentDate >= compareStart) && (currentDate < compareEnd) ) {
             let streamURL = server + '/gamechanger.m3u8'
             let multiviewquerystring = '/gamechanger.m3u8?resolution=' + DEFAULT_MULTIVIEW_RESOLUTION + content_protect_b
@@ -2050,14 +2291,15 @@ app.get('/', async function(req, res) {
             if ( linkType == VALID_LINK_TYPES[4] ) {
               streamURL += '&filename=' + gameDate + ' Game Changer'
             }
-            body += '<a href="' + streamURL + '">Game Changer</a>'
-            body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + multiviewquerystring + '" onclick="addmultiview(this, [], excludeTeams)">'
+            body += '<span>' + subscriptionInfoLabel('<a href="' + streamURL + '">Game Changer</a>', 'gameChangerInfo')
+            body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + multiviewquerystring + '" onclick="addmultiview(this, [], excludeTeams)"></span>'
           } else {
-            body += 'Game Changer'
+            body += subscriptionInfoLabel('Game Changer', 'gameChangerInfo')
           }
-          body += '</td></tr>' + "\n"
-          
-          body += '<tr><td><span class="tooltip">' + compareStart.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + ' - ' + compareEnd.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + '<span class="tooltiptext">The stream finder stream will automatically switch between games according to your uploaded preferences. This stream is not affiliated with Baseball Reference, do not contact them for support. Visit <a href="http://bit.ly/bbrefsf">http://bit.ly/bbrefsf</a> to create and export your preferences, then upload and save them to mlbserver <a href="#streamfinder">below</a>. Does not support adaptive bitrate switching, will default to 720p60 resolution if not specified.</span></span></td><td>'
+          body += '</div>' + "\n"
+          body += subscriptionInfo('gameChangerInfo', 'gameChanger')
+          body += '<div class="flex-between subscriptionStream">' + "\n"
+          body += '<span class="tinytext">' + compareStart.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + ' - ' + compareEnd.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + '</span>'
           if ( (currentDate >= compareStart) && (currentDate < compareEnd) ) {
             let streamURL = server + '/gamechanger.m3u8?streamFinder=on'
             let multiviewquerystring = '/gamechanger.m3u8?streamFinder=on&resolution=' + DEFAULT_MULTIVIEW_RESOLUTION + content_protect_b
@@ -2073,15 +2315,17 @@ app.get('/', async function(req, res) {
             if ( linkType == VALID_LINK_TYPES[4] ) {
               streamURL += '&filename=' + gameDate + ' Stream Finder'
             }
-            body += '<a href="' + streamURL + '">Stream Finder</a>'
-            body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + multiviewquerystring + '" onclick="addmultiview(this, [], excludeTeams)">'
+            body += '<span>' + subscriptionInfoLabel('<a href="' + streamURL + '">Stream Finder</a>', 'streamFinderInfo')
+            body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + multiviewquerystring + '" onclick="addmultiview(this, [], excludeTeams)"></span>'
           } else {
-            body += 'Stream Finder'
+            body += subscriptionInfoLabel('Stream Finder', 'streamFinderInfo')
           }
-          body += '</td></tr>' + "\n"
+          body += '</div>'
+          body += subscriptionInfo('streamFinderInfo', 'streamFinder')
         }
       }
     }
+    body += `</div></div>`
 
     if ( cache_data.dates && cache_data.dates[0] && cache_data.dates[0].games ) {
       for (var j = 0; j < cache_data.dates[0].games.length; j++) {
@@ -2089,43 +2333,70 @@ app.get('/', async function(req, res) {
 
         let game_started = false
 
-        let awayteam = cache_data.dates[0].games[j].teams['away'].team.abbreviation
-        let awayteam_abbr
+        let parentAwayVis = 'is-invisible'
+        let awayteam = cache_data.dates[0].games[j].teams['away'].team.clubName
+        let awayteam_abbr = cache_data.dates[0].games[j].teams['away'].team.abbreviation
         if ( cache_data.dates[0].games[j].teams['away'].team.sport.name != 'Major League Baseball' ) {
           awayteam = cache_data.dates[0].games[j].teams['away'].team.shortName
           let parentOrgName = cache_data.dates[0].games[j].teams['away'].team.parentOrgName
-          if (parentOrgName != 'Office of the Commissioner') awayteam += ' (' + session.getParent(parentOrgName) + ')'
+          if (parentOrgName != 'Office of the Commissioner') parentAwayVis = '';
           awayteam_abbr = cache_data.dates[0].games[j].teams['away'].team.abbreviation
           awayteam_level = session.getLevelNameFromSportId(cache_data.dates[0].games[j].teams['away'].team.sport.id)
         }
-        let hometeam = cache_data.dates[0].games[j].teams['home'].team.abbreviation
-        let hometeam_abbr
+        let parentHomeVis = 'is-invisible'
+        let hometeam = cache_data.dates[0].games[j].teams['home'].team.clubName
+        let hometeam_abbr = cache_data.dates[0].games[j].teams['home'].team.abbreviation
         if ( cache_data.dates[0].games[j].teams['home'].team.sport.name != 'Major League Baseball' ) {
           hometeam = cache_data.dates[0].games[j].teams['home'].team.shortName
           let parentOrgName = cache_data.dates[0].games[j].teams['home'].team.parentOrgName
-          if (parentOrgName != 'Office of the Commissioner') hometeam += ' (' + session.getParent(parentOrgName) + ')'
+          if (parentOrgName != 'Office of the Commissioner') parentHomeVis = '';
           hometeam_abbr = cache_data.dates[0].games[j].teams['home'].team.abbreviation
           hometeam_level = session.getLevelNameFromSportId(cache_data.dates[0].games[j].teams['home'].team.sport.id)
         }
 
-        let teams = ""
+        let awayDisplay = awayteam
+        let homeDisplay = hometeam
+        /*
         if ( awayteam_abbr ) {
-          teams += '<span class="tooltip">' + awayteam + '<span class="tooltiptext">Team Abbreviation: ' + awayteam_abbr + ', level ' + awayteam_level + '</span></span>'
-        } else {
-          teams += awayteam
+          awayDisplay =
+            '<span class="tooltip">' +
+            awayteam +
+            '<span class="tooltiptext left">' +
+            awayteam_abbr + ' (' + awayteam_level  + ')' +
+            '</span></span>'
         }
-        teams += " @ "
+
         if ( hometeam_abbr ) {
-          teams += '<span class="tooltip">' + hometeam + '<span class="tooltiptext">Team Abbreviation: ' + hometeam_abbr + ', level ' + hometeam_level + '</span></span>'
-        } else {
-          teams += hometeam
+          homeDisplay =
+            '<span class="tooltip">' +
+            hometeam +
+            '<span class="tooltiptext right">' +
+            hometeam_abbr + ' (' + hometeam_level  + ')' + 
+            '</span></span>'
         }
-        let filename_teams = awayteam + " @ " + hometeam
-        let pitchers = ""
-        let state = "<br/>"
+          */
+
+        let filename_teams = awayteam + ' @ ' + hometeam
+        let awayPitcher = ''
+        let homePitcher = ''
+        let state = ''
+
+        let awayscore = ''
+        let homescore = ''
+
+        let noteworthyTag = ''
+        let noteworthyTooltip = ''
+        let noteworthyCSS = ''
+        let tooltipCSS = ''
+        let tooltipTextCSS = ''
+
+        let streamSource = {
+            homeTV: '',
+            awayTV: '',
+          }
 
         if ( cache_data.dates[0].games[j].status.startTimeTBD == true ) {
-          state += "Time TBD"
+          state = 'Time TBD'
         } else {
           let startTime = new Date(cache_data.dates[0].games[j].gameDate)
           state += startTime.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })
@@ -2139,8 +2410,8 @@ app.get('/', async function(req, res) {
         relative_inning = relative_inning < 0 ? 0 : relative_inning
         //if ( (scores == VALID_SCORES[1]) && (cache_data.dates[0].games[j].gameUtils.isLive || cache_data.dates[0].games[j].gameUtils.isFinal) && !cache_data.dates[0].games[j].gameUtils.isCancelled && !cache_data.dates[0].games[j].gameUtils.isPostponed ) {
         if ( (scores == VALID_SCORES[1]) && (abstractGameState != 'Preview') && (detailedState != 'Postponed') ) {
-          let awayscore = ''
-          let homescore = ''
+          awayscore = ''
+          homescore = ''
           if ( (inning_number != VALID_INNING_NUMBER[0]) && cache_data.dates[0].games[j].linescore && cache_data.dates[0].games[j].linescore.innings ) {
             awayscore = 0
             homescore = 0
@@ -2170,59 +2441,86 @@ app.get('/', async function(req, res) {
               }
             }
             if ( display_inning != '' ) {
-              state = "<br/>" + display_inning
+              state = display_inning
             }
           } else {
             awayscore = cache_data.dates[0].games[j].teams['away'].score
             homescore = cache_data.dates[0].games[j].teams['home'].score
-            //if ( cache_data.dates[0].games[j].gameUtils.isLive && !cache_data.dates[0].games[j].gameUtils.isFinal ) {
+             //if ( cache_data.dates[0].games[j].gameUtils.isLive && !cache_data.dates[0].games[j].gameUtils.isFinal ) {
             if ( abstractGameState == 'Live' ) {
-              state = "<br/>" + cache_data.dates[0].games[j].linescore.inningHalf.substr(0,1) + cache_data.dates[0].games[j].linescore.currentInning
+              state = cache_data.dates[0].games[j].linescore.inningHalf.substr(0,1) + cache_data.dates[0].games[j].linescore.currentInning
             //} else if ( cache_data.dates[0].games[j].gameUtils.isFinal ) {
             } else if ( abstractGameState == 'Final' ) {
-              state = "<br/>" + detailedState
+              state = detailedState
             }
             if ( cache_data.dates[0].games[j].flags ) {
               if ( cache_data.dates[0].games[j].flags.perfectGame == true ) {
-                state += "<br/>Perfect Game"
+                noteworthyTag = 'PG'
+                noteworthyTooltip = 'Perfect Game'
+                noteworthyCSS = 'tag noteworthy'
+                tooltipCSS = 'tooltip'
+                tooltipTextCSS = 'tooltiptext'
               } else if ( cache_data.dates[0].games[j].flags.noHitter == true ) {
-                state += "<br/>No-Hitter"
+                noteworthyTag = 'NH'
+                noteworthyTooltip = 'No-Hitter'
+                noteworthyCSS = 'tag noteworthy'
+                tooltipCSS = 'tooltip'
+                tooltipTextCSS = 'tooltiptext'
+              } else { 
+                noteworthyTag = ''
               }
             }
           }
-          teams = awayteam + " " + awayscore + " @ " + hometeam + " " + homescore
-        //} else if ( cache_data.dates[0].games[j].gameUtils.isCancelled || cache_data.dates[0].games[j].gameUtils.isPostponed || cache_data.dates[0].games[j].gameUtils.isSuspended ) {
+          //} else if ( cache_data.dates[0].games[j].gameUtils.isCancelled || cache_data.dates[0].games[j].gameUtils.isPostponed || cache_data.dates[0].games[j].gameUtils.isSuspended ) {
         } else if ( detailedState == 'Postponed' ) {
-          state = "<br/>" + detailedState
-        //} else if ( cache_data.dates[0].games[j].gameUtils.isDelayed ) {
+          state = detailedState
+           //} else if ( cache_data.dates[0].games[j].gameUtils.isDelayed ) {
         } else if ( detailedState.startsWith('Delayed') ) {
-          state += "<br/>" + detailedState
+         state = detailedState
         }
 
-        var filename = gameDate + ' ' + filename_teams + ' '
+         var filename = gameDate + ' ' + filename_teams + ' '
+
+        let scheduleVis = 'is-invisible'
+        let doubleHeaderVis = 'is-invisible'
+        let inningsVis = 'is-invisible'
+        let blackoutVis = 'is-invisible'
+        let blackoutToolTipVis = 'is-invisible'
+        let blackoutType = ''
+        let blackoutExpiry = ''
+        
+        let scheduleDesc = ''
+        let gameNo = ''
+        let resumeText = ''
+
+        let highlightLink = ''
+        let condensedLink = ''
+        let recapLink = ''
 
         if ( cache_data.dates[0].games[j].doubleHeader != 'N'  ) {
-          state += "<br/>Game " + cache_data.dates[0].games[j].gameNumber
+          gameNo = cache_data.dates[0].games[j].gameNumber
+          doubleHeaderVis = ''
           filename += 'Game ' + cache_data.dates[0].games[j].gameNumber + ' '
         }
         if ( cache_data.dates[0].games[j].description ) {
-          state += "<br/>" + cache_data.dates[0].games[j].description
+          scheduleDesc = cache_data.dates[0].games[j].description
+          scheduleVis = ''
         }
         if ( scheduledInnings != '9' ) {
-          state += "<br/>" + scheduledInnings + "-inning game"
+          inningsVis = ''
         }
         var resumeStatus = false
         if ( cache_data.dates[0].games[j].resumeGameDate || cache_data.dates[0].games[j].resumedFromDate ) {
-          state += '<br/>Resum'
+          let resumeText = ''
           let resumeDate
           if ( cache_data.dates[0].games[j].resumeGameDate ) {
             resumeDate = new Date(cache_data.dates[0].games[j].resumeDate)
-            state += 'ing on'
+            resumeText += 'Resuming on'
           } else {
             resumeDate = new Date(cache_data.dates[0].games[j].resumedFrom)
-            state += 'ed from'
+            resumeText += 'Resumed from'
           }
-          state += '<br/>' + resumeDate.toLocaleString('default', { month: 'long', day: 'numeric' })
+          resumeText += '' + resumeDate.toLocaleString('default', { month: 'long', day: 'numeric' })
           // Also show the status by the media links, if one of them is live
           resumeStatus = 'archived'
           if ( (typeof cache_data.dates[0].games[j].broadcasts) != 'undefined' ) {
@@ -2236,61 +2534,82 @@ app.get('/', async function(req, res) {
         }
 
         if ( (cache_data.dates[0].games[j].teams['away'].probablePitcher && cache_data.dates[0].games[j].teams['away'].probablePitcher.fullName) || (cache_data.dates[0].games[j].teams['home'].probablePitcher && cache_data.dates[0].games[j].teams['home'].probablePitcher.fullName) ) {
-          pitchers = "<br/>"
           if ( cache_data.dates[0].games[j].teams['away'].probablePitcher && cache_data.dates[0].games[j].teams['away'].probablePitcher.fullName ) {
             if ( cache_data.dates[0].games[j].teams['away'].team.sport.name != 'Major League Baseball' ) {
-              pitchers += cache_data.dates[0].games[j].teams['away'].probablePitcher.fullName
+              awayPitcher = getLastName(cache_data.dates[0].games[j].teams['away'].probablePitcher.fullName)
             } else {
-              pitchers += getLastName(cache_data.dates[0].games[j].teams['away'].probablePitcher.fullName)
+              awayPitcher = getLastName(cache_data.dates[0].games[j].teams['away'].probablePitcher.fullName)
             }
-            pitchers += '</a>'
           } else {
-            pitchers += 'TBD'
+            awayPitcher = 'TBD'
           }
-          pitchers += ' vs '
           if ( cache_data.dates[0].games[j].teams['home'].probablePitcher && cache_data.dates[0].games[j].teams['home'].probablePitcher.fullName ) {
             if ( cache_data.dates[0].games[j].teams['home'].team.sport.name != 'Major League Baseball' ) {
-              pitchers += cache_data.dates[0].games[j].teams['home'].probablePitcher.fullName
+              homePitcher = getLastName(cache_data.dates[0].games[j].teams['home'].probablePitcher.fullName)
             } else {
-              pitchers += getLastName(cache_data.dates[0].games[j].teams['home'].probablePitcher.fullName)
+              homePitcher = getLastName(cache_data.dates[0].games[j].teams['home'].probablePitcher.fullName)
             }
-            pitchers += '</a>'
           } else {
-            pitchers += 'TBD'
+            homePitcher = 'TBD'
           }
         }
 
-        body += '<tr'
+        function hexToRgba(hex, alpha) {
+          const r = parseInt(hex.substring(0, 2), 16)
+          const g = parseInt(hex.substring(2, 4), 16)
+          const b = parseInt(hex.substring(4, 6), 16)
+          return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + alpha + ')'
+        }
+
         let fav_style = ''
-        if ( argv.free && cache_data.dates[0].games[j].broadcasts && cache_data.dates[0].games[j].broadcasts[0] && cache_data.dates[0].games[j].broadcasts[0].freeGame ) {
-          body += ' class="freegame"'
+        let freeGameVis = 'is-invisible'
+        let favoritVis = 'is-invisible' 
+        let condensedCSS = 'videos shortButton'
+        let recapCSS = 'videos shortButton'
+        let highlightCSS = 'videos regularButton'
+        let backgroundCSS = 'backgroundRegular'
+        
+       if ( argv.free && cache_data.dates[0].games[j].broadcasts && cache_data.dates[0].games[j].broadcasts[0] && cache_data.dates[0].games[j].broadcasts[0].freeGame ) {
+          freeGameVis = ''
+ 
         } else if ( session.credentials.fav_teams.includes(cache_data.dates[0].games[j].teams['away'].team.abbreviation) || session.credentials.fav_teams.includes(cache_data.dates[0].games[j].teams['home'].team.abbreviation) ) {
           let fav_team = cache_data.dates[0].games[j].teams['away'].team.abbreviation
           if ( session.credentials.fav_teams.includes(cache_data.dates[0].games[j].teams['home'].team.abbreviation) ) {
             fav_team = cache_data.dates[0].games[j].teams['home'].team.abbreviation
           }
-          fav_style = ' style="color:#' + TEAM_COLORS[fav_team][0] + ';background:#' + TEAM_COLORS[fav_team][1] + ';"'
-          body += fav_style
+
+          favoritVis = ''
+          let color1 = hexToRgba(TEAM_COLORS[fav_team][1], 0.2)
+          let color2 = hexToRgba(TEAM_COLORS[fav_team][0], 0)
+          
+          fav_style = ' style="background-image: linear-gradient(' + '0deg, ' + color1 + ', ' + color2 + '); border: 2px solid #' + TEAM_COLORS[fav_team][1] + '!important;; border-style: outset; border-radius: 3px;"'
         }
-        let description = ''
+
+        let gameLevel = session.getLevelNameFromSportId(cache_data.dates[0].games[j].teams['home'].team.sport.id);
+        let gameLevelClass = 'level-' + gameLevel.toLowerCase().replace('+', '-plus')
+
         if ( cache_data.dates[0].games[j].seriesDescription != 'Regular Season' ) {
-          description += cache_data.dates[0].games[j].seriesDescription + ': '
+          gameLevel = cache_data.dates[0].games[j].seriesDescription
         }
-        body += '><td>' + description + teams + pitchers + state + '</td>'
 
         // Check if Winter League / MiLB game first
-        if ( (cache_data.dates[0].games[j].teams['away'].team.sport.id != levels['MLB']) && (cache_data.dates[0].games[j].teams['home'].team.sport.id != levels['MLB']) && (mediaType == 'MLBTV') ) {
-          body += "<td>"
+        if ( (cache_data.dates[0].games[j].teams['away'].team.sport.id != levels['MLB']) && (cache_data.dates[0].games[j].teams['home'].team.sport.id != levels['MLB']) && (mediaTypeTV == 'MLBTV') ) {
+          recapCSS = 'is-invisible'
+          condensedCSS = 'is-invisible'
+          highlightCSS = 'is-invisible'
           if ( cache_data.dates[0].games[j].broadcasts ) {
             let broadcastName = 'N/A'
             for (var k = 0; k < cache_data.dates[0].games[j].broadcasts.length; k++) {
               if ( cache_data.dates[0].games[j].broadcasts[k].name != 'Audio' ) {
-                broadcastName = mediaType
+                broadcastName = mediaTypeTV
                 break
               }
             }
             if ( broadcastName == 'N/A' ) {
-              body += broadcastName
+              streamSource.homeTV +=
+                '<span>' +
+                '<span class="streamAction streamActionInactive">' + broadcastName + '</span>' +
+                '</span>'
             } else {
               // Check if game should be live
               if ( (cache_data.dates[0].games[j].status.detailedState != 'Postponed') && (cache_data.dates[0].games[j].status.detailedState != 'Cancelled') ) {
@@ -2336,21 +2655,30 @@ app.get('/', async function(req, res) {
                   }
                   querystring += content_protect_b
                   multiviewquerystring += content_protect_b
-                  body += '<a href="' + thislink + querystring + '">' + broadcastName + '</a>'
-                  body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + '/stream.m3u8' + multiviewquerystring + '" onclick="addmultiview(this)">'
+
+                  streamSource.homeTV +=
+                    '<span>' +
+                    '<input type="checkbox" value="http://127.0.0.1:' +
+                    session.data.port +
+                    '/stream.m3u8' +
+                    multiviewquerystring +
+                    '" onclick="addmultiview(this)">' +
+                    '<span>' +
+                    '<a class="streamAction" href="' + thislink + querystring + '">' + broadcastName + '</a>' +
+                    '</span>' +
+                    '</span>'
                 } else {
-                  body += broadcastName
+                  streamSource.homeTV +=
+                    '<span>' +
+                    '<span class="streamAction streamActionInactive">' + broadcastName + '</span>' +
+                    '</span>'
                 }
               }
             }
           }
-          body += "</td>"
         } else {
           // Begin MLB games
-          if ( (typeof cache_data.dates[0].games[j].broadcasts) == 'undefined' ) {
-            body += "<td></td>"
-          } else {
-            body += "<td>"
+          if ( (typeof cache_data.dates[0].games[j].broadcasts) != 'undefined' ) {
             for (var k = 0; k < cache_data.dates[0].games[j].broadcasts.length; k++) {
               let broadcast = cache_data.dates[0].games[j].broadcasts[k]
               if ( broadcast.availableForStreaming ) {
@@ -2360,47 +2688,43 @@ app.get('/', async function(req, res) {
                 } else if ( broadcast.language == 'es' ) {
                   mediaTitle = 'Spanish'
                 }
-                if ( mediaTitle == mediaType ) {
-                  // for video, check that it's not in-market
-                  /*if ( (mediaType == 'MLBTV') && await session.check_in_market(cache_data.dates[0].games[j].content.media.epg[k].items[x]) ) {
-                    continue
-                  }*/
+                if ( mediaTitle == mediaTypeTV ) {
+                // for video, check that it's not in-market
+                /*if ( (mediaTypeTV == 'MLBTV') && await session.check_in_market(cache_data.dates[0].games[j].content.media.epg[k].items[x]) ) {
+                  continue
+                }*/
 
                   // check if language is not set (video) or it matches requested language
                   if ( broadcast.language == language ) {
-                    let teamabbr
-
-                    if ( broadcast.isNational ) {
-                      teamabbr = 'NATIONAL'
-                    } else {
-                      teamabbr = hometeam
-                      if ( broadcast.homeAway == 'away' ) {
-                        teamabbr = awayteam
-                      }
-                    }
                     let station = broadcast.callSign
-                    
-                    if ( pre_post_shows.pregame_shows && pre_post_shows.pregame_shows[broadcast.mediaId] ) {
-                      station = '/' + station
-                    }
-                    if ( pre_post_shows.postgame_shows && pre_post_shows.postgame_shows[broadcast.mediaId] ) {
-                      station += '/'
+                    let hasPregameShow = pre_post_shows.pregame_shows && pre_post_shows.pregame_shows[broadcast.mediaId]
+                    let hasPostgameShow = pre_post_shows.postgame_shows && pre_post_shows.postgame_shows[broadcast.mediaId]
+                    let prePostIndicator = ''
+
+                    if ( hasPregameShow || hasPostgameShow ) {
+                      let prePostTitle = 'Pregame show'
+                      if ( hasPregameShow && hasPostgameShow ) {
+                        prePostTitle = 'Pre- & postgame shows'
+                      } else if ( hasPostgameShow ) {
+                        prePostTitle = 'Postgame show'
+                      }
+                      prePostIndicator =
+                        '<span class="prePostIndicator" title="' + prePostTitle + '">' +
+                        '<span class="prePostCircle ' + (hasPregameShow ? 'prePostCircleActive' : 'prePostCircleInactive') + '"></span>' +
+                        '<span class="prePostCircle ' + (hasPostgameShow ? 'prePostCircleActive' : 'prePostCircleInactive') + '"></span>' +
+                        '</span>'
                     }
 
-                    // display blackout tooltip, if necessary
                     if ( blackouts[gamePk] && blackouts[gamePk].blackout_feeds && blackouts[gamePk].blackout_feeds.includes(broadcast.mediaId) ) {
-                      body += '<span class="tooltip"><span class="blackout">' + teamabbr + '</span><span class="tooltiptext">' + blackouts[gamePk].blackout_type
-                      if ( blackouts[gamePk].blackout_type != 'Not entitled' ) {
-                        body += ' video blackout until approx. 2.5 hours after the game'
-                        if ( blackouts[gamePk].blackoutExpiry ) {
-                          body += ' (~' + blackouts[gamePk].blackoutExpiry.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + ')'
-                        }
+                      blackoutVis = '' 
+                      blackoutType = blackouts[gamePk].blackout_type
+
+                      if ( blackoutType != 'Not entitled' ) {
+                      blackoutToolTipVis = ''
+                      blackoutExpiry = blackouts[gamePk].blackoutExpiry.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) 
+                       // officially ~90 minutes, but more likely ~150 minutes or ~2.5 hours after the game ends  
                       }
-                      body += '</span></span>'
-                    } else {
-                      body += teamabbr
                     }
-                    body += ': '
 
                     if ( broadcast.mediaState && broadcast.mediaState.mediaStateCode && ((broadcast.mediaState.mediaStateCode == 'MEDIA_ON') || (broadcast.mediaState.mediaStateCode == 'MEDIA_ARCHIVE') || (abstractGameState == 'Final')) ) {
                       let gameTime = new Date(cache_data.dates[0].games[j].gameDate)
@@ -2409,10 +2733,12 @@ app.get('/', async function(req, res) {
                         game_started = true
                       }
                       let mediaId = broadcast.mediaId
-                      if ( (mediaType == 'MLBTV') && (gameDate == today) && session.cache.media && session.cache.media[mediaId] && session.cache.media[mediaId].blackout && session.cache.media[mediaId].blackoutExpiry && (new Date(session.cache.media[mediaId].blackoutExpiry) > new Date()) ) {
-                        body += '<span class="blackout">' + station + '</span>'
+                         if ( (mediaTypeTV == 'MLBTV') && (gameDate == today) && session.cache.media && session.cache.media[mediaId] && session.cache.media[mediaId].blackout && session.cache.media[mediaId].blackoutExpiry && (new Date(session.cache.media[mediaId].blackoutExpiry) > new Date()) ) {
+                        streamSource.awayTV +=
+                          '<span class="streamAction streamActionInactive blackoutstation">' + station + '</span>' +
+                          prePostIndicator
                       } else {
-                        let querystring
+                        let querystring 
                         querystring = '?mediaId=' + mediaId
 
                         let multiviewquerystring = querystring + '&resolution=' + DEFAULT_MULTIVIEW_RESOLUTION
@@ -2428,7 +2754,7 @@ app.get('/', async function(req, res) {
                           if ( startFrom != VALID_START_FROM[0] ) querystring += '&startFrom=' + startFrom
                           if ( controls != VALID_CONTROLS[0] ) querystring += '&controls=' + controls
                         }
-                        if ( mediaType == 'MLBTV' ) {
+                        if ( mediaTypeTV == 'MLBTV' ) {
                           if ( inning_half != VALID_INNING_HALF[0] ) querystring += '&inning_half=' + inning_half
                           if ( inning_number != VALID_INNING_NUMBER[0] ) querystring += '&inning_number=' + relative_inning
                           if ( skip != VALID_SKIP[0] ) querystring += '&skip=' + skip
@@ -2449,263 +2775,481 @@ app.get('/', async function(req, res) {
                         }
                         querystring += content_protect_b
                         multiviewquerystring += content_protect_b
-                        stationlink = '<a' + fav_style + ' href="' + thislink + querystring + '">' + station + '</a>'
+                        stationlink = '<a class="streamAction" href="' + thislink + querystring + '">' + station + '</a>'
 
-                        if ( blackouts[gamePk] && blackouts[gamePk].blackout_feeds && blackouts[gamePk].blackout_feeds.includes(broadcast.mediaId) ) {
-                          body += '<span class="blackout">' + stationlink + '</span>'
-                        } else {
-                          body += stationlink
-                        }
-                        if ( mediaType == 'MLBTV' ) {
-                          body += '<input type="checkbox" value="http://127.0.0.1:' + session.data.port + '/stream.m3u8' + multiviewquerystring + '" onclick="addmultiview(this, [\'' + awayteam + '\', \'' + hometeam + '\'])">'
-                        }
-                        if ( resumeStatus ) {
-                          body += '('
-                          // for suspended games that haven't finished yet, we can simply use the mediaState to determine the status
-                          if ( resumeStatus == 'live' ) {
-                            if ( broadcast.mediaState.mediaStateCode == 'MEDIA_ARCHIVE' ) {
-                              body += '1'
-                            } else {
-                              body += '2'
-                            }
-                          // otherwise, for completed games, we need to check the airings data
+                        let streamStationHtml = stationlink + prePostIndicator
+                        let resumeStreamSuffix = ''
+                        // For suspended games that are currently live, mark whether this feed is part 1 or part 2.
+                        if ( resumeStatus == 'live' ) {
+                          if ( broadcast.mediaState.mediaStateCode == 'MEDIA_ARCHIVE' ) {
+                            resumeStreamSuffix = '(1)'
                           } else {
-                            /*airings_data = await session.getAiringsData('', cache_data.dates[0].games[j].gamePk)
-                            if ( airings_data.data && airings_data.data.Airings && (airings_data.data.Airings.length > 0) ) {
-                              for (var y = 0; y < airings_data.data.Airings.length; y++) {
-                                if ( airings_data.data.Airings[y].contentId == cache_data.dates[0].games[j].content.media.epg[k].items[x].contentId ) {
-                                  if ( (cache_data.dates[0].games[j].resumeDate && (cache_data.dates[0].games[j].resumeDate == airings_data.data.Airings[y].startDate)) || (cache_data.dates[0].games[j].resumedFrom && (cache_data.dates[0].games[j].gameDate == airings_data.data.Airings[y].startDate)) ) {
-                                    body += '2'
-                                  } else {
-                                    body += '1'
-                                  }
-                                  break
-                                }
-                              }
-                            }*/
+                            resumeStreamSuffix = '(2)'
                           }
-                          body += ')'
                         }
+
+                      if (broadcast.homeAway == 'home') {
+                        streamSource.homeTV += '<span>'
+
+                        if ( mediaTypeTV == 'MLBTV' ) {
+                          streamSource.homeTV +=
+                            '<input type="checkbox" value="http://127.0.0.1:' +
+                            session.data.port +
+                            '/stream.m3u8' +
+                            multiviewquerystring +
+                            '" onclick="addmultiview(this, [\'' +
+                            awayteam +
+                            '\', \'' +
+                            hometeam +
+                            '\'])">'
+                        }
+
+                        streamSource.homeTV +=
+                          streamStationHtml +
+                          resumeStreamSuffix
+
+                        streamSource.homeTV +=
+                          '</span>'
+                      } else if (broadcast.homeAway == 'away') {
+                        streamSource.awayTV += '<span>'
+
+                        if ( mediaTypeTV == 'MLBTV' ) {
+                          streamSource.awayTV +=
+                            '<input type="checkbox" value="http://127.0.0.1:' +
+                            session.data.port +
+                            '/stream.m3u8' +
+                            multiviewquerystring +
+                            '" onclick="addmultiview(this, [\'' +
+                            awayteam +
+                            '\', \'' +
+                            hometeam +
+                            '\'])">'
+                        }
+
+                        streamSource.awayTV +=
+                          streamStationHtml +
+                          resumeStreamSuffix
+
+                        streamSource.awayTV +=
+
+                          '</span>'
+                      }
                       }
                       // add YouTube link where available
-                      /*if ( (mediaType == 'MLBTV') && cache_data.dates[0].games[j].content.media.epg[k].items[x].youtube && cache_data.dates[0].games[j].content.media.epg[k].items[x].youtube.videoId ) {
+                      /*if ( (mediaTypeTV == 'MLBTV') && cache_data.dates[0].games[j].content.media.epg[k].items[x].youtube && cache_data.dates[0].games[j].content.media.epg[k].items[x].youtube.videoId ) {
                         body += '<a' + fav_style + ' href="https://www.youtube.com/watch?v=' + cache_data.dates[0].games[j].content.media.epg[k].items[x].youtube.videoId + '" target="_blank">' + station + '&UpperRightArrow;</a>'
                       }*/
                     } else {
+                      let inactiveStation = station
+
                       if ( blackouts[gamePk] && blackouts[gamePk].blackout_feeds && blackouts[gamePk].blackout_feeds.includes(broadcast.mediaId) ) {
-                        body += '<s>' + station + '</s>'
+                        inactiveStation = '<span class="streamAction streamActionInactive blackoutstation">' + station + '</span>' + prePostIndicator
+                        backgroundCSS = 'backgroundBlackout'
                       } else {
-                        body += station
+                        inactiveStation = '<span class="streamAction streamActionInactive">' + station + '</span>' + prePostIndicator
                       }
-                    } // end media active check
-                    body += ', '
-                  } // end streaming available check
+
+                      if (broadcast.homeAway == 'home') {streamSource.homeTV +=
+                        '<div>' +
+                        '<div>' +
+                        inactiveStation +
+                        '</div>' +
+                        '</div>' } else if (broadcast.homeAway == 'away') {streamSource.awayTV +=
+                        '<div>' +
+                        '<div>' +
+                        inactiveStation +
+                        '</div>' +
+                        '</div>' }
+                    }
+                  }
                 }
               }
             }
-            if ( body.substr(-2) == ', ' ) {
-              body = body.slice(0, -2)
+
+            if (mediaTypeTV == 'MLBTV' && game_started) {
+              highlightLink +=
+                '<a' +
+                ' href="#" onclick="showhighlights(\'' +
+                cache_data.dates[0].games[j].gamePk +
+                '\',\'' +
+                gameDate +
+                '\'); return false;">Highlights</a>'
+            } else { highlightLink += `Highlights`
+              highlightCSS = 'videosInactive regularButton'
+             }
+
+            if (mediaTypeTV == 'MLBTV' && abstractGameState == 'Final' && (detailedState != 'Postponed') ) {
+              condensedLink +=
+                '<a' +
+                ' href="#" onclick="showcondensed(\'' +
+                cache_data.dates[0].games[j].gamePk +
+                '\',\'' +
+                gameDate +
+                '\'); return false;">Cond.</a>'
+            } else { condensedLink += `Cond.` 
+                     condensedCSS = 'videosInactive shortButton'}
+
+            if (mediaTypeTV == 'MLBTV' && abstractGameState == 'Final' && (detailedState != 'Postponed')) {
+              recapLink +=
+                '<a' +
+                ' href="#" onclick="showrecap(\'' +
+                cache_data.dates[0].games[j].gamePk +
+                '\',\'' +
+                gameDate +
+                '\'); return false;">Recap</a>'
+            } else {
+              recapLink += `Recap`
+              recapCSS = 'videosInactive shortButton'
             }
-            //if ( (mediaType == 'MLBTV') && (game_started) && cache_data.dates[0].games[j].content && cache_data.dates[0].games[j].content.summary && cache_data.dates[0].games[j].content.summary.hasHighlightsVideo ) {
-            if ( (mediaType == 'MLBTV') && (game_started) ) {
-              body += '<br/><a' + fav_style + ' href="#" onclick="showhighlights(\'' + cache_data.dates[0].games[j].gamePk + '\',\'' + gameDate + '\'); return false;">Highlights</a>'
-            }
+
           }
-          body += "</td>"
-          body += "</tr>" + "\n"
         }
+              let pitcherVis = 'is-invisible'
+              if (awayPitcher || homePitcher) { pitcherVis ='' }
+            body +=`
+          <div class="cardContainer ${backgroundCSS} ${gameLevelClass}" ${fav_style}>
+
+            <div class="cardHeader flex-between">
+              <div class="flex-between">
+                  <div class="tag level ${gameLevelClass}">${gameLevel}</div>
+
+              </div>
+              <div class="cardTags">
+                  <span class="tooltip ${scheduleVis}">
+                    <span class="tag schedule">SCD
+                      <span class="tooltiptext"> ${scheduleDesc}<br>${resumeText}</span>
+                    </span>
+                  </span>
+                  <span class="tooltip ${doubleHeaderVis}">
+                    <span class="tag gameno">G${gameNo}
+                      <span class="tooltiptext"> Game ${gameNo}</span>
+                    </span>
+                  </span>
+                  <span class="tooltip  ${inningsVis}">
+                    <span class="tag innings">${scheduledInnings}IN
+                      <span class="tooltiptext">${scheduledInnings}-inning game </span>
+                    </span>
+                  </span>
+                   <span class="tooltip ${blackoutVis}">
+                  <span class="tag blackout">BLACKOUT
+                    <span class="tooltiptext">${blackoutType}
+                      <span class="${blackoutToolTipVis}"> video blackout until approx. ${blackoutExpiry}</span>
+                    </span>
+                  </span>
+                </span>
+                <span class="tooltip ${freeGameVis}">
+                  <span class="tag freegame">Free
+                    <span class="tooltiptext">Free Game</span>
+                  </span>
+                </span>
+                <span class="tooltip ${favoritVis}">
+                  <span class="tag favorite">FAV
+                    <span class="tooltiptext">Favorite team</span>
+                  </span>
+                </span>
+                <span class="${tooltipCSS}">
+                  <span class="${noteworthyCSS}">${noteworthyTag}
+                    <span class="${tooltipTextCSS}">${noteworthyTooltip}</span>
+                  </span>
+                </span>
+               <span class="time">${state}</span>
+              </div>
+            </div>
+
+            <div class="gameContent">
+
+              <div class="row ${gameLevel}">
+                <div class="team">
+                <span class="pitcher">${awayPitcher}</span>
+                  <span class="teamName">${awayteam}</span>
+                 
+                  
+                </div>
+                <div class="score">
+                  <span class="">${awayscore}</span>
+                </div>
+            
+              </div>
+              <div class="parentOrg ${parentAwayVis}">` + cache_data.dates[0].games[j].teams['away'].team.parentOrgName + `</div>
+
+              <div class="row ${gameLevel}">
+                <div class="team">
+                <span class="pitcher">${homePitcher}</span>
+                  <span class="teamName">${hometeam}</span>
+              
+                  
+                </div>
+                <div class="score">
+                  <span class="">${homescore}</span>
+                </div>
+              </div>
+              <div class="parentOrg ${parentHomeVis}">` + cache_data.dates[0].games[j].teams['home'].team.parentOrgName + `</div>
+     
+            
+
+            
+          </div>
+          <div class="streamContent">
+                <span class="">${streamSource.awayTV}</span>
+                <span class="flex-center ${highlightCSS}">★ ${highlightLink}</span>
+          </div>
+
+          <div class="streamContent">
+            <span class="">${streamSource.homeTV}</span>
+            <div class="flex-center">
+              <span class="flex-center ${recapCSS}">${recapLink}</span>
+              <span class="flex-center ${condensedCSS}">${condensedLink}</span>
+            </div>
+          </div>
+      
+
+        </div>`
       }
     }
-    body += "</table>" + "\n"
 
-    if ( (Object.keys(blackouts).length > 0) ) {
-      body += '<span class="tooltip tinytext"><span class="blackout">strikethrough</span> indicates a live blackout or non-entitled content<span class="tooltiptext">Tap or hover over the team abbreviation to see an estimate of when the blackout will be lifted (officially ~90 minutes, but more likely ~150 minutes or ~2.5 hours after the game ends).</span></span>' + "\n"
-      if ( (Object.keys(pre_post_shows).length > 0) ) {
-        body += '<br/>'
-      }
-    }
+body +=`</div>`
 
-    if ( (pre_post_shows.pregame_shows && (Object.keys(pre_post_shows.pregame_shows).length > 0)) || (pre_post_shows.postgame_shows && (Object.keys(pre_post_shows.postgame_shows).length > 0)) ) {
-      body += '<span class="tooltip tinytext">/slashes/ indicates a live pre- and/or post-game show<span class="tooltiptext">A /slash before the station indicates a pre-game show; a slash/ after the station indicates a post-game show. Pre- and post-game shows are only available live.</span></span>' + "\n"
-      if ( argv.free ) {
-        body += '<br/>'
-      }
-    }
-
-    if ( argv.free ) {
-      body += '<span class="freegame tooltip tinytext">green indicates a free game<span class="tooltiptext">Free games are available to anyone with an account, no subscription necessary. Blackouts still apply.</span></span>' + "\n"
-    }
-
-    // Rename parameter back before displaying further links
-    if ( mediaType == 'MLBTV' ) {
-      mediaType = VALID_MEDIA_TYPES[0]
-    }
-
-    if ( mediaType == VALID_MEDIA_TYPES[0] ) {
-        body += '<p><span class="tooltip">Video<span class="tooltiptext">For video streams only: you can manually specifiy a video track (resolution) to use. Adaptive will let your client choose. Best will select either 1080p60 (MLB) or 720p60 (MiLB). 504p is default for multiview (see below).<br/><br/>None will allow to remove the video tracks, if you just want to listen to the audio while using the "start at inning" or "skip breaks" options enabled.</span></span>: '
-        body += '<button '
-        if ( resolution == 'best' ) body += 'class="default" '
-        body += 'onclick="resolution=\'best\';reload()">best</button> '
-        for (var i = 0; i < VALID_RESOLUTIONS.length; i++) {
-          body += '<button '
-          if ( resolution == VALID_RESOLUTIONS[i] ) body += 'class="default" '
-          body += 'onclick="resolution=\'' + VALID_RESOLUTIONS[i] + '\';reload()">' + VALID_RESOLUTIONS[i]
-          if ( DISPLAY_BANDWIDTHS[i] != '' ) {
-            body += '<br/><span class="tinytext">' + DISPLAY_BANDWIDTHS[i] + '</span>'
-          }
-          body += '</button> '
-        }
-        body += '</p>' + "\n"
-
-        body += '<p><span class="tooltip">Audio<span class="tooltiptext">For video streams only: you can manually specifiy which audio track to include. Some media players can accept them all and let you choose. Not all tracks are available for all games, and injected tracks may not work with skip options below.<br/><br/>If you select "none" for video above, picking an audio track here will make it an audio-only feed that supports the inning start and skip breaks options.</span></span>: '
-        for (var i = 0; i < VALID_AUDIO_TRACKS.length; i++) {
-          body += '<button '
-          if ( audio_track == VALID_AUDIO_TRACKS[i] ) body += 'class="default" '
-          body += 'onclick="audio_track=\'' + VALID_AUDIO_TRACKS[i] + '\';reload()">' + DISPLAY_AUDIO_TRACKS[i] + '</button> '
-        }
-        body += '</p>' + "\n"
-
-        body += '<p><span class="tooltip">Captions<span class="tooltiptext">For video streams only: you can disable the caption track, if one is present. This is handy if you do not want to disable it in your player each time.</span></span>: '
-        for (var i = 0; i < VALID_CAPTIONS.length; i++) {
-          body += '<button '
-          if ( captions == VALID_CAPTIONS[i] ) body += 'class="default" '
-          body += 'onclick="captions=\'' + VALID_CAPTIONS[i] + '\';reload()">' + VALID_CAPTIONS[i] + '</button> '
-        }
-        body += '</p>' + "\n"
-
-        body += '<p><span class="tooltip">Skip<span class="tooltiptext">For video streams only (use the video "none" option above to apply it to audio streams): you can remove all breaks, idle time, non-action pitches, or only commercial breaks from the stream (useful to make your own "condensed games").<br/><br/>NOTES: skip timings are only generated when the stream is loaded -- so for live games, it will only skip up to the time you loaded the stream. Also, commercial skip will not work on pre-2024 games, or on MiLB games -- use skip breaks instead.</span></span>: '
-        for (var i = 0; i < VALID_SKIP.length; i++) {
-          body += '<button '
-          if ( skip == VALID_SKIP[i] ) body += 'class="default" '
-          body += 'onclick="skip=\'' + VALID_SKIP[i] + '\';reload()">' + VALID_SKIP[i] + '</button> '
-        }
-        if ( skip != VALID_SKIP[0] ) {
-          body += '<br><span class="tooltip">Skip Adjust<span class="tooltiptext">Seconds to adjust the skip time video segments, if necessary. Try a negative number if the plays are ending before the video segments begin; use a positive number if the video segments are ending before the play happens.</span></span>: <input type="number" id="skip_adjust" value="' + skip_adjust + '" step="1" onchange="setTimeout(function(){skip_adjust=document.getElementById(\'skip_adjust\').value;reload()},750)" onblur="skip_adjust=this.value;reload()" style="vertical-align:top;font-size:.8em;width:3em"/>'
-        }
-        body += '</p>' + "\n"
-      }
-
-      body += '<p><span class="tooltip">Pad<span class="tooltiptext">You can pad archive streams with random extra time at the end, to help conceal timeline spoilers.</span></span>: '
-      for (var i = 0; i < VALID_PAD.length; i++) {
-        body += '<button '
-        if ( pad == VALID_PAD[i] ) body += 'class="default" '
-        body += 'onclick="pad=\'' + VALID_PAD[i] + '\';reload()">' + VALID_PAD[i] + '</button> '
-      }
-      body += '</p>' + "\n"
-
-      if ( (linkType == VALID_LINK_TYPES[1]) && (gameDate == today) ) {
-        body += '<p><span class="tooltip">Force VOD<span class="tooltiptext">For streams only: if your client does not support seeking in mlbserver live streams, turning this on will make the stream look like a VOD stream instead, allowing the client to start at the beginning and allowing the user to seek within it. You will need to reload the stream to watch/view past the current time, though.</span></span>: '
-        for (var i = 0; i < VALID_FORCE_VOD.length; i++) {
-          body += '<button '
-          if ( force_vod == VALID_FORCE_VOD[i] ) body += 'class="default" '
-          body += 'onclick="force_vod=\'' + VALID_FORCE_VOD[i] + '\';reload()">' + VALID_FORCE_VOD[i] + '</button> '
-        }
-        body += '<span class="tinytext">(if client does not support seeking in live streams)</span></p>' + "\n"
-      }
+body +=`<div class="section">`
+ 
 
       if ( mediaType == VALID_MEDIA_TYPES[0] ) {
-        body += '<table><tr><td><table><tr><td>1</td><td>2</tr><tr><td>3</td><td>4</td></tr></table><td><span class="tooltip">Multiview / Alternate Audio / Sync<span class="tooltiptext">For video streams only: create a new live stream combining 1-4 separate video streams, using the layout shown at left (if more than 1 video stream is selected). Check the boxes next to feeds above to add/remove them, then click "Start" when ready, "Stop" when done watching, or "Restart" to stop and start with the currently selected streams. May take up to 15 seconds after starting before it is ready to play.<br/><br/>No video scaling is performed: defaults to 540p video for each stream, which can combine to make one 1080p stream. Audio defaults to English (TV) audio. If you specify a different audio track instead, you can use the box after each URL below to adjust the sync in seconds (use positive values if audio is early and the audio stream needs to be padded with silence at the beginning to line up with the video; negative values if audio is late, and audio needs to be trimmed from the beginning.)<br/><br/>TIP #1: You can enter just 1 video stream here, at any resolution, to take advantage of the audio sync or alternate audio features without using multiview -- a single video stream will not be re-encoded and will be presented at its full resolution.<br/><br/>TIP #2: You can also manually enter streams from other sources like <a href="https://www.npmjs.com/package/milbserver" target="_blank">milbserver</a> in the boxes below. Make sure any manually entered streams have the desired resolution.<br/><br/>WARNING #1: if the mlbserver process dies or restarts while multiview is active, the ffmpeg encoding process will be orphaned and must be killed manually.<br/><br/>WARNING #2: If you did not specify a hardware encoder for ffmpeg on the command line, this will use your server CPU for encoding. Either way, your system may not be able to keep up with processing 4 video streams at once. Try fewer streams if you have perisistent trouble.</span></span>: <a id="startmultiview" href="" onclick="startmultiview(this);return false">Start'
+        body += '<div class="menuContainer"><div class="cardMenuHeader">Multiview / Alternate Audio / Sync</div><div class="menuContent multiviewContent">' +
+         '<div class="multiviewHeader"><div class="is-flex"><span>For video streams only: create a new live stream combining 1-4 separate video streams, using the layout shown at left (if more than 1 video stream is selected). Check the boxes next to feeds above to add/remove them, then click "Start" when ready, "Stop" when done watching, or "Restart" to stop and start with the currently selected streams.&nbsp;<span class="info infoPadding multiviewInfoButton" data-target="#multiviewInfo">?</span></span></div><div class="multiviewActions"><a id="startmultiview" class="multiviewAction multiviewActionPrimary" href="" onclick="startmultiview(this);return false">Start'
         if ( ffmpeg_status ) body += 'ed'
-        body += '</a> | <a id="stopmultiview" href="" onclick="stopmultiview(this);return false">Stop'
+        body += '</a><a id="stopmultiview" class="multiviewAction" href="" onclick="stopmultiview(this);return false">Stop'
         if ( !ffmpeg_status ) body += 'ped'
-        body += '</a><br/>' + "\n"
-        body += '<span class="tinytext">(check boxes next to games to add, then click "Start";<br/>must click "Stop" link above when done, or manually kill ffmpeg)</span></td></tr><tr><td colspan="2">' + "\n"
+        body += '</a></div></div>' + "\n" +
+        '<div class="multiviewIntro"><div class="square-grid"><div>1</div><div>2</div><div>3</div><div>4</div></div>'
+       
+        body +=  '<span>Check boxes next to games to add, then click Start. Click Stop when done, or manually kill ffmpeg.</span></div>' + ''
+body += `
+         <div id="multiviewInfo" class="infoContainer">
+        <div class="">
+            <div class="infoContent">
+              May take up to 15 seconds after starting before it is ready to play.<br/><br/>No video scaling is performed: defaults to 540p video for each stream, which can combine to make one 1080p stream. Audio defaults to English (TV) audio. If you specify a different audio track instead, you can use the box after each URL below to adjust the sync in seconds (use positive values if audio is early and the audio stream needs to be padded with silence at the beginning to line up with the video; negative values if audio is late, and audio needs to be trimmed from the beginning.)<br/><br/>TIP #1: You can enter just 1 video stream here, at any resolution, to take advantage of the audio sync or alternate audio features without using multiview -- a single video stream will not be re-encoded and will be presented at its full resolution.<br/><br/>TIP #2: You can also manually enter streams from other sources like <a href="https://www.npmjs.com/package/milbserver" target="_blank">milbserver</a> in the boxes below. Make sure any manually entered streams have the desired resolution.<br/><br/>WARNING #1: if the mlbserver process dies or restarts while multiview is active, the ffmpeg encoding process will be orphaned and must be killed manually.<br/><br/>WARNING #2: If you did not specify a hardware encoder for ffmpeg on the command line, this will use your server CPU for encoding. Either way, your system may not be able to keep up with processing 4 video streams at once. Try fewer streams if you have perisistent trouble.
+            </div>
+            </div>
+  
+        </div>
+      `
+
         for (var i=1; i<=4; i++) {
-          body += i + ': <textarea id="multiview' + i + '" rows=2 cols=60 oninput="this.value=stream_substitution(this.value)"></textarea>'
-          body += '<input type="number" id="sync' + i + '" value="0.0" step=".1" style="vertical-align:top;font-size:.8em;width:3em"/>'
-          body += '<br/>' + "\n"
+          body += '<div class="multiviewStreamRow"><label for="multiview' + i + '">' + i + ':</label><textarea id="multiview' + i + '" oninput="this.value=stream_substitution(this.value)"></textarea>'
+          body += '<input type="number" id="sync' + i + '" value="0.0" step=".1"/></div>' + "\n"
         }
-        body += '<input type="checkbox" id="dvr"/> <span class="tooltip">DVR: allow pausing/seeking multiview<span class="tooltiptext">If this is enabled, it will use more disk space but you will be able to pause and seek in the multiview stream. Not necessary if you are strictly watching live.</span></span><br/>' + "\n"
-        body += '<input type="checkbox" id="faster" onchange="if (this.checked){document.getElementById(\'dvr\').checked=true}"/> <span class="tooltip">Encode faster than real-time<span class="tooltiptext">Implies DVR. Not necessary for live streams (which are only delivered in real-time), but if you want to seek ahead in archive streams using multiview, you may want to enable this. WARNING: ffmpeg may approach 100% CPU usage if you use this while combining multiple archive video streams in multiview.</span></span><br/>' + "\n"
-        body += '<input type="checkbox" id="reencode"/> <span class="tooltip">Re-encode all audio<span class="tooltiptext">Uses more CPU. Generally only necessary if you need the multiview stream to continue after one of the individual streams has ended. (Any streams with sync adjustments above will automatically be re-encoded, regardless of this setting.)</span></span><br/>' + "\n"
-        body += '<input type="checkbox" id="park_audio"/> <span class="tooltip">Park audio: filter out announcers<span class="tooltiptext">Implies re-encoding all audio. If this is enabled, an extra audio filter is applied to remove the announcer voices.</span></span><br/>' + "\n"
-        body += '<hr><span class="tooltip">Alternate audio URL and sync<span class="tooltiptext">Optional: you can also include a separate audio-only URL as an additional alternate audio track. Archive games will likely require a very large negative sync value, as the radio broadcasts may not be trimmed like the video archives.</span></span>:<br/><textarea id="audio_url" rows=2 cols=60 oninput="this.value=stream_substitution(this.value)"></textarea><input id="audio_url_seek" type="number" value="0" style="vertical-align:top;font-size:.8em;width:4em"/>'
-        body += '<hr>Watch: <a href="' + http_root + '/embed.html?msrc=' + encodeURIComponent(multiview_stream_url) + content_protect_b + '">Embed</a> | <a href="' + http_root + '/stream.m3u8?src=' + encodeURIComponent(multiview_stream_url) + content_protect_b + '">Stream</a> | <a href="' + http_root + '/chromecast.html?msrc=' + encodeURIComponent(multiview_stream_url) + content_protect_b + '">Chromecast</a> | <a href="' + http_root + '/advanced.html?msrc=' + encodeURIComponent(multiview_stream_url) + content_protect_b + '">Advanced</a> | <a href="' + http_root + '/download.ts?src=' + encodeURIComponent(multiview_stream_url) + content_protect_b + '&filename=' + gameDate + ' Multiview">Download</a><br/><span class="tinytext">Kodi STRM files: <a href="' + http_root + '/kodi.strm?src=' + encodeURIComponent(multiview_stream_url) + content_protect_b + '">Matrix/19+</a> (<a href="' + http_root + '/kodi.strm?version=18&src=' + encodeURIComponent(multiview_stream_url) + content_protect_b + '">Leia/18</a>)</span>'
-        body += '</td></tr></table><br/>' + "\n"
+        body += `
+          <div class="is-flex">
+            <input type="checkbox" id="dvr"/>
+            <span>DVR: allow pausing/seeking multiview</span>
+            <div class="info infoPadding" data-target="#dvrInfo">?</div>
+          </div>
+          <div id="dvrInfo" class="infoContainer">
+            <div class="infoContent">
+              If this is enabled, it will use more disk space but you will be able to pause and seek in the multiview stream. Not necessary if you are strictly watching live.
+            </div>
+          </div>
+
+          <div class="is-flex">
+            <input type="checkbox" id="faster" onchange="if (this.checked){document.getElementById('dvr').checked=true}"/>
+            <span>Encode faster than real-time</span>
+            <div class="info infoPadding" data-target="#fasterInfo">?</div>
+          </div>
+          <div id="fasterInfo" class="infoContainer">
+            <div class="infoContent">
+              Implies DVR. Not necessary for live streams (which are only delivered in real-time), but if you want to seek ahead in archive streams using multiview, you may want to enable this. WARNING: ffmpeg may approach 100% CPU usage if you use this while combining multiple archive video streams in multiview.
+            </div>
+          </div>
+
+          <div class="is-flex">
+            <input type="checkbox" id="reencode"/>
+            <span>Re-encode all audio</span>
+            <div class="info infoPadding" data-target="#reencodeInfo">?</div>
+          </div>
+          <div id="reencodeInfo" class="infoContainer">
+            <div class="infoContent">
+              Uses more CPU. Generally only necessary if you need the multiview stream to continue after one of the individual streams has ended. Any streams with sync adjustments above will automatically be re-encoded, regardless of this setting.
+            </div>
+          </div>
+
+          <div class="is-flex">
+            <input type="checkbox" id="park_audio"/>
+            <span>Park audio: filter out announcers</span>
+            <div class="info infoPadding" data-target="#parkAudioInfo">?</div>
+          </div>
+          <div id="parkAudioInfo" class="infoContainer">
+            <div class="infoContent">
+              Implies re-encoding all audio. If this is enabled, an extra audio filter is applied to remove the announcer voices.
+            </div>
+          </div>`
+
+        body += `
+          <div class="is-flex">
+            <span>Alternate audio URL and sync</span>
+            <div class="info infoPadding" data-target="#altAudio">?</div>
+          </div>
+          <div id="altAudio" class="infoContainer">
+            <div class="infoContent">
+              Optional: you can also include a separate audio-only URL as an additional alternate audio track. Archive games will likely require a very large negative sync value, as the radio broadcasts may not be trimmed like the video archives.
+            </div>
+          </div>
+          <div class="multiviewAudioRow">
+            <textarea id="audio_url" oninput="this.value=stream_substitution(this.value)"></textarea>
+            <input id="audio_url_seek" type="number" value="0"/>
+          </div>
+          <div class="multiviewWatchLinks">
+            <a class="channelLink" href="${http_root}/embed.html?msrc=${encodeURIComponent(multiview_stream_url)}${content_protect_b}">Embed</a>
+            <a class="channelLink" href="${http_root}/stream.m3u8?src=${encodeURIComponent(multiview_stream_url)}${content_protect_b}">Stream</a>
+            <a class="channelLink" href="${http_root}/chromecast.html?msrc=${encodeURIComponent(multiview_stream_url)}${content_protect_b}">Chromecast</a>
+            <a class="channelLink" href="${http_root}/advanced.html?msrc=${encodeURIComponent(multiview_stream_url)}${content_protect_b}">Advanced</a>
+            <a class="channelLink" href="${http_root}/download.ts?src=${encodeURIComponent(multiview_stream_url)}${content_protect_b}&filename=${gameDate} Multiview">Download</a>
+          </div>
+          <div class="multiviewWatchLinks">
+            <span class="channelNote">Kodi STRM files:</span>
+            <a class="channelLink" href="${http_root}/kodi.strm?src=${encodeURIComponent(multiview_stream_url)}${content_protect_b}">Matrix/19+</a>
+            <a class="channelLink" href="${http_root}/kodi.strm?version=18&src=${encodeURIComponent(multiview_stream_url)}${content_protect_b}">Leia/18</a>
+          </div>
+        </div></div>
+        `
     
-        body += '<table><tr><td><p><a name="streamfinder"/><span class="tooltip">Stream Finder Settings<span class="tooltiptext">Automatically switches between games according to your preferences. This program is not affiliated with Baseball Reference, do not contact them for support.</span></span></p><p><a download="mlbserverStreamFinder.txt" href="' + http_root + '/downloadsettings' + content_protect_a + '">Click to Download Currently Stored Settings</a></p><p><b><u>Step 1</b></u><br/>Export and download your desired Stream Finder settings at this link:<br/><a href="https://www.baseball-reference.com/stream-finder.shtml" target="_blank">https://www.baseball-reference.com/stream-finder.shtml</a></p><form method="POST" enctype="multipart/form-data" action="' + http_root + '/upload' + content_protect_a + '"><p><b><u>Step 2</b></u><br/>Click this button and select the settings file you just downloaded:<br/><input name="file" type="file" onchange="form.submit()"/></p></form></td></tr></table><br/>' + "\n"
+        body += `
+          <div class="menuContainer">
+            <div class="cardMenuHeader">Stream Finder Settings</div>
+            <div class="menuContent streamFinderContent">
+             <div>Automatically switches between games according to your preferences. This program is not affiliated with Baseball Reference, do not contact them for support.</div>
+              <div>
+                <a class="channelLink" download="mlbserverStreamFinder.txt" href="${http_root}/downloadsettings${content_protect_a}">Download current settings</a>
+              </div>
+              <div class="streamFinderSteps">
+                <div class="streamFinderStep">
+                  <div class="streamFinderStepNumber">1</div>
+                  <div class="streamFinderStepContent">
+                    <div class="streamFinderStepTitle">Export settings</div>
+                    <div class="streamFinderStepText">Create and export your Stream Finder settings at Baseball Reference.</div>
+                    <a class="channelLink" href="https://www.baseball-reference.com/stream-finder.shtml" target="_blank">Open Stream Finder</a>
+                  </div>
+                </div>
+                <div class="streamFinderStep">
+                  <div class="streamFinderStepNumber">2</div>
+                  <div class="streamFinderStepContent">
+                    <div class="streamFinderStepTitle">Upload settings</div>
+                    <div class="streamFinderStepText">Select the settings file you just downloaded.</div>
+                    <form method="POST" enctype="multipart/form-data" action="${http_root}/upload${content_protect_a}">
+                      <input name="file" type="file" onchange="form.submit()"/>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>` + "\n"
+    }
+body +=`</div>`
+    const channelInfoText = {
+      scanMode: 'During setup, some TV/DVR/PVR software will attempt to load all stream URLs. Turning Scan Mode ON will return a sample stream for all stream requests, thus satisfying that software without overloading mlbserver or excluding streams which are not currently live. Once the channels are set up, turning Scan Mode OFF will restore normal stream behavior. WARNING: Be sure your TV/DVR/PVR software does not periodically scan all channels automatically or you might overload mlbserver.',
+      allChannels: 'Will include all entitled live MLB broadcasts (games plus Big Inning, Game Changer, and Multiview, as well as MASN, MLB Network, SNLA, and/or SNY as appropriate). If favorite team(s) have been provided, it will also include affiliate games for those organizations. Channels/games subject to blackout will be omitted by default.',
+      byTeam: 'Including a team (MLB only, by abbreviation, in a comma-separated list if more than 1) will include all of its broadcasts, or if that team is not broadcasting the game, it will include the national broadcast or opponent broadcast if available. It will also include affiliate games for those organizations. Channels/games subject to blackout will be omitted by default.',
+      byTeamRadio: 'Same as By team, but defaults to that team radio track, if available.',
+      byTeamSpanish: 'Same as By team, but defaults to that team Spanish radio track, if available.',
+      includeBlackouts: 'Adds an optional parameter to include channels/games subject to blackout, although you may not be able to play those games.',
+      excludeTeam: 'Excluding a team (MLB only, by abbreviation, in a comma-separated list if more than 1) will exclude every game involving that team. Blackouts are already excluded without this parameter.',
+      winterLeagues: 'Winter leagues include the Arizona Fall League, Dominican Winter League aka Liga de Beisbol Dominicano, and Mexican Winter League aka Liga Mexicana del Pacifico. Live stream only, does not support starting from the beginning or certain innings, skip options, etc.',
+      masn: 'MASN live stream for entitled subscribers. See https://support.mlb.com/s/article/MASN-In-Market-Offering for more information.',
+      mlbn: 'MLB Network live stream is now available in the USA for paid MLBTV subscribers or as a paid add-on, in addition to authenticated TV subscribers. See https://support.mlb.com/s/article/MLB-Network-Streaming-FAQ for more information.',
+      snla: 'SNLA live stream for entitled subscribers. See https://support.mlb.com/s/article/SNLA-Plus-Subscription-Packages for more information.',
+      sny: 'SNY live stream for entitled subscribers. See https://support.mlb.com/s/article/SNY-In-Market-Offering for more information.',
+      bigInning: 'Big Inning is the live look-in and highlights show. See https://www.mlb.com/live-stream-games/big-inning for more information.',
+      gameChanger: 'The game changer stream will automatically switch between the highest leverage active live non-blackout games, and should be available whenever there are such games available. Does not support adaptive bitrate switching, will default to best resolution if not specified.',
+      streamFinder: 'The stream finder stream will automatically switch between games according to your uploaded preferences. This stream is not affiliated with Baseball Reference, do not contact them for support. Visit http://bit.ly/bbrefsf to create and export your preferences, then upload and save them to mlbserver above. Does not support adaptive bitrate switching, will default to best resolution if not specified.',
+      multiviewChannel: 'Requires starting and stopping the multiview stream from the web interface.',
+      freeGames: 'Only includes games marked as free. Blackouts still apply. Channels/games subject to blackout will be omitted by default.',
+      includeOrgs: 'Including an organization (by MLB team abbreviation, in a comma-separated list if more than 1) will include all of its affiliate broadcasts, or if that affiliate is not broadcasting the game, it will include the opponent broadcast if available. If this option is not specified, but favorite team(s) have been provided, affiliate games for those organizations will be included anyway.',
+      includeLevels: 'Including a level (AAA, AA, A+ encoded as A%2B, or A, in a comma-separated list if more than 1) will include all of its broadcasts, and exclude all other levels.',
+      includeTeamsInTitles: 'Adds an optional parameter to include team names in the ICS/XML titles. A value of "channels" will format the titles in the style of the legacy Channels container.',
+      offAir: 'Adds an optional parameter to create "Off Air" events in the XML guide, listing the time of the next game on that channel. A value of "channels" will format the events in the style of the legacy Channels container.'
     }
 
-    body += '<table><tr><td>' + "\n"
+    function channelInfo(label, id) {
+      return `<div class="channelLabel"><span>${label}</span><div class="info infoPadding" data-target="#${id}">?</div></div><div id="${id}" class="infoContainer"><div class="infoContent">${channelInfoText[id]}</div></div>`
+    }
 
-    body += '<p><span class="tooltip">Live Channel Playlist, XMLTV Guide, ICS Calendar<span class="tooltiptext">Allows you to generate a M3U playlist of channels, and an XML file of guide listings for those channels, to import into TV/DVR/PVR software like Tvheadend or Jellyfin. You can also subscribe to the calendar links in your preferred calendar program/service to set up event notifications.<br/><br/>NOTE: May be helpful to specify a resolution above.</span></span>:</p>' + "\n"
+body += `
+      <div class="section">`
 
-    body += '<p><span class="tooltip">Scan Mode<span class="tooltiptext">During setup, some TV/DVR/PVR software will attempt to load all stream URLs. Turning Scan Mode ON will return a sample stream for all stream requests, thus satisfying that software without overloading mlbserver or excluding streams which aren\'t currently live. Once the channels are set up, turning Scan Mode OFF will restore normal stream behavior.<br/><br/>WARNING: Be sure your TV/DVR/PVR software doesn\'t periodically scan all channels automatically or you might overload mlbserver.</span></span>: '
+    body += '<div class="menuContainer"><div class="cardMenuHeader">Live Channel Playlist, XMLTV Guide, ICS Calendar</div><div class="menuContent channelContent">' + "\n"
+    body += '<span> Allows you to generate a M3U playlist of channels, and an XML file of guide listings for those channels, to import into TV/DVR/PVR software like Tvheadend or Jellyfin. You can also subscribe to the calendar links in your preferred calendar program/service to set up event notifications. NOTE: May be helpful to specify a resolution above.</span>'
+
+    body += '<div class="channelScanMode"><div>' + channelInfo('Scan Mode', 'scanMode') + '</div><div class="channelLinks">'
     for (var i = 0; i < VALID_SCAN_MODES.length; i++) {
       body += '<button '
       if ( scan_mode == VALID_SCAN_MODES[i] ) body += 'class="default" '
       body += 'onclick="scan_mode=\'' + VALID_SCAN_MODES[i] + '\';reload()">' + VALID_SCAN_MODES[i] + '</button> '
     }
-    body += ' <span class="tinytext">(ON plays sample for all stream requests)</span></p>' + "\n"
+    body += ' <span class="channelNote">(ON plays sample for all stream requests)</span></div></div>' + "\n"
 
     if ( !req.query.resolution ) {
       resolution = 'best'
     }
 
-    body += '<p><span class="tooltip">All<span class="tooltiptext">Will include all entitled live MLB broadcasts (games plus Big Inning, Game Changer, and Multiview, as well as MASN, MLB Network, SNLA, and/or SNY as appropriate). If favorite team(s) have been provided, it will also include affiliate games for those organizations. Channels/games subject to blackout will be omitted by default. See below for an additional option to override that.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + content_protect_b + '">channels.m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + content_protect_b + '">guide.xml</a> and <a href="' + http_root + '/calendar.ics?mediaType=' + mediaType + content_protect_b + '">calendar.ics</a></p>' + "\n"
+    body += '<div class="channelRow"><div>' + channelInfo('All', 'allChannels') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/calendar.ics?mediaType=' + mediaType + content_protect_b + '">ics</a></div></div>' + "\n"
 
     let include_teams = 'ath,atl'
     if ( (session.credentials.fav_teams.length > 0) && (session.credentials.fav_teams[0].length > 0) ) {
       include_teams = session.credentials.fav_teams.toString()
     }
-    body += '<p><span class="tooltip">By team<span class="tooltiptext">Including a team (MLB only, by abbreviation, in a comma-separated list if more than 1) will include all of its broadcasts, or if that team is not broadcasting the game, it will include the national broadcast or opponent\'s broadcast if available. It will also include affiliate games for those organizations. Channels/games subject to blackout will be omitted by default. See below for an additional option to override that.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=' + include_teams + content_protect_b + '">channels.m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + content_protect_b + '">guide.xml</a> and <a href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=' + include_teams + content_protect_b + '">calendar.ics</a></p>' + "\n"
+    body += '<div class="channelRow"><div>' + channelInfo('By team', 'byTeam') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=' + include_teams + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=' + include_teams + content_protect_b + '">ics</a></div></div>' + "\n"
     
-    body += '<p><span class="tooltip">By team w/ radio<span class="tooltiptext">Same as above, but defaults to that team\'s radio track, if available.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=' + include_teams + '&audio_track=radio' + content_protect_b + '">channels.m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&audio_track=radio' + content_protect_b + '">guide.xml</a> and <a href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&audio_track=radio' + content_protect_b + '">calendar.ics</a></p>' + "\n"
+    body += '<div class="channelRow"><div>' + channelInfo('By team w/ radio', 'byTeamRadio') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=' + include_teams + '&audio_track=radio' + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&audio_track=radio' + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&audio_track=radio' + content_protect_b + '">ics</a></div></div>' + "\n"
     
-    body += '<p><span class="tooltip">By team w/ Spanish<span class="tooltiptext">Same as above, but defaults to that team\'s Spanish radio track, if available.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=' + include_teams + '&audio_track=spanish' + content_protect_b + '">channels.m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&audio_track=spanish' + content_protect_b + '">guide.xml</a> and <a href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&audio_track=spanish' + content_protect_b + '">calendar.ics</a></p>' + "\n"
+    body += '<div class="channelRow"><div>' + channelInfo('By team w/ Spanish', 'byTeamSpanish') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=' + include_teams + '&audio_track=spanish' + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&audio_track=spanish' + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&audio_track=spanish' + content_protect_b + '">ics</a></div></div>' + "\n"
 
-    body += '<p><span class="tooltip">Include blackouts<span class="tooltiptext">An optional parameter added to the URL will include channels/games subject to blackout (although you may not be able to play those games).</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=' + include_teams + '&includeBlackouts=true' + content_protect_b + '">channels.m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&includeBlackouts=true' + content_protect_b + '">guide.xml</a> and <a href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&includeBlackouts=true' + content_protect_b + '">calendar.ics</a></p>' + "\n"
+    body += '<div class="channelRow"><div>' + channelInfo('Include blackouts', 'includeBlackouts') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=' + include_teams + '&includeBlackouts=true' + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&includeBlackouts=true' + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&includeBlackouts=true' + content_protect_b + '">ics</a></div></div>' + "\n"
 
     let exclude_teams = 'ath,atl'
-    body += '<p><span class="tooltip">Exclude a team<span class="tooltiptext">Excluding a team (MLB only, by abbreviation, in a comma-separated list if more than 1) will exclude every game involving that team. Note that blackouts are already excluded without the need to specify this parameter.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&excludeTeams=' + exclude_teams + content_protect_b + '">m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&excludeTeams=' + exclude_teams + content_protect_b + '">xml</a> and <a href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&excludeTeams=' + exclude_teams + content_protect_b + '">ics</a></p>' + "\n"
+    body += '<div class="channelRow"><div>' + channelInfo('Exclude a team', 'excludeTeam') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&excludeTeams=' + exclude_teams + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&excludeTeams=' + exclude_teams + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&excludeTeams=' + exclude_teams + content_protect_b + '">ics</a></div></div>' + "\n"
 
-    body += '<p><span class="tooltip">Include (or exclude) Winter Leagues<span class="tooltiptext">Winter leagues include the Arizona Fall League, Dominican Winter League aka Liga de Beisbol Dominicano, and Mexican Winter League aka Liga Mexicana del Pacífico. Live stream only, does not support starting from the beginning or certain innings, skip options, etc.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=winter' + content_protect_b + '">m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=winter' + content_protect_b + '">xml</a> and <a href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=winter' + content_protect_b + '">ics</a></p>' + "\n"
+    body += '<div class="channelRow"><div>' + channelInfo('Include (or exclude) Winter Leagues', 'winterLeagues') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=winter' + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=winter' + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=winter' + content_protect_b + '">ics</a></div></div>' + "\n"
 
     if ( entitlements.includes('MASN_110') ) {
-      body += '<p><span class="tooltip">Include (or exclude) MASN<span class="tooltiptext">MASN live stream for entitled subscribers. <a href="https://support.mlb.com/s/article/MASN-In-Market-Offering">See here for more information</a>.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=masn' + content_protect_b + '">m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=masn' + content_protect_b + '">xml</a></p>' + "\n"
+      body += '<div class="channelRow"><div>' + channelInfo('Include (or exclude) MASN', 'masn') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=masn' + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=masn' + content_protect_b + '">xml</a></div></div>' + "\n"
     }
 
     if ( entitlements.includes('MLBN') || entitlements.includes('EXECMLB') || entitlements.includes('MLBTVMLBNADOBEPASS') ) {
-      body += '<p><span class="tooltip">Include (or exclude) MLB Network<span class="tooltiptext">MLB Network live stream is now available in the USA for paid MLBTV subscribers or as a paid add-on, in addition to authenticated TV subscribers. <a href="https://support.mlb.com/s/article/MLB-Network-Streaming-FAQ">See here for more information</a>.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=mlbn' + content_protect_b + '">m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=mlbn' + content_protect_b + '">xml</a></p>' + "\n"
+      body += '<div class="channelRow"><div>' + channelInfo('Include (or exclude) MLB Network', 'mlbn') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=mlbn' + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=mlbn' + content_protect_b + '">xml</a></div></div>' + "\n"
     }
 
     if ( entitlements.includes('SNLA_119') ) {
-      body += '<p><span class="tooltip">Include (or exclude) SportsNet LA<span class="tooltiptext">SNLA live stream for entitled subscribers. <a href="https://support.mlb.com/s/article/SNLA-Plus-Subscription-Packages">See here for more information</a>.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=snla' + content_protect_b + '">m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=snla' + content_protect_b + '">xml</a></p>' + "\n"
+      body += '<div class="channelRow"><div>' + channelInfo('Include (or exclude) SportsNet LA', 'snla') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=snla' + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=snla' + content_protect_b + '">xml</a></div></div>' + "\n"
     }
 
     if ( entitlements.includes('SNY_121') ) {
-      body += '<p><span class="tooltip">Include (or exclude) SNY<span class="tooltiptext">SNY live stream for entitled subscribers. <a href="https://support.mlb.com/s/article/SNY-In-Market-Offering">See here for more information</a>.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=sny' + content_protect_b + '">m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=sny' + content_protect_b + '">xml</a></p>' + "\n"
+      body += '<div class="channelRow"><div>' + channelInfo('Include (or exclude) SNY', 'sny') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=sny' + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=sny' + content_protect_b + '">xml</a></div></div>' + "\n"
     }
 
-    body += '<p><span class="tooltip">Include (or exclude) Big Inning<span class="tooltiptext">Big Inning is the live look-in and highlights show. <a href="https://www.mlb.com/live-stream-games/big-inning">See here for more information</a>.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=biginning' + content_protect_b + '">m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=biginning' + content_protect_b + '">xml</a> and <a href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=biginning' + content_protect_b + '">ics</a></p>' + "\n"
+    body += '<div class="channelRow"><div>' + channelInfo('Include (or exclude) Big Inning', 'bigInning') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=biginning' + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=biginning' + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=biginning' + content_protect_b + '">ics</a></div></div>' + "\n"
 
     let gamechanger_resolution = resolution
     if ( gamechanger_resolution == VALID_RESOLUTIONS[0] ) {
       gamechanger_resolution = 'best'
     }
-    body += '<p><span class="tooltip">Include (or exclude) Game Changer<span class="tooltiptext">The game changer stream will automatically switch between the highest leverage active live non-blackout games, and should be available whenever there are such games available. Does not support adaptive bitrate switching, will default to best resolution if not specified.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + gamechanger_resolution + '&includeTeams=gamechanger' + content_protect_b + '">m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=gamechanger' + content_protect_b + '">xml</a> and <a href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=gamechanger' + content_protect_b + '">ics</a></p>' + "\n"
+    body += '<div class="channelRow"><div>' + channelInfo('Include (or exclude) Game Changer', 'gameChanger') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + gamechanger_resolution + '&includeTeams=gamechanger' + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=gamechanger' + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=gamechanger' + content_protect_b + '">ics</a></div></div>' + "\n"
     
-    body += '<p><span class="tooltip">Include (or exclude) Stream Finder<span class="tooltiptext">The stream finder stream will automatically switch between games according to your uploaded preferences. This stream is not affiliated with Baseball Reference, do not contact them for support. Visit <a href="http://bit.ly/bbrefsf">http://bit.ly/bbrefsf</a> to create and export your preferences, then upload and save them to mlbserver <a href="#streamfinder">above</a>. Does not support adaptive bitrate switching, will default to best resolution if not specified.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + gamechanger_resolution + '&includeTeams=streamfinder' + content_protect_b + '">m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=streamfinder' + content_protect_b + '">xml</a> and <a href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=streamfinder' + content_protect_b + '">ics</a></p>' + "\n"
+    body += '<div class="channelRow"><div>' + channelInfo('Include (or exclude) Stream Finder', 'streamFinder') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + gamechanger_resolution + '&includeTeams=streamfinder' + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=streamfinder' + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=streamfinder' + content_protect_b + '">ics</a></div></div>' + "\n"
 
-    body += '<p><span class="tooltip">Include (or exclude) Multiview<span class="tooltiptext">Requires starting and stopping the multiview stream from the web interface.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&includeTeams=multiview' + content_protect_b + '">m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=multiview' + content_protect_b + '">xml</a> and <a href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=multiview' + content_protect_b + '">ics</a></p>' + "\n"
+    body += '<div class="channelRow"><div>' + channelInfo('Include (or exclude) Multiview', 'multiviewChannel') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&includeTeams=multiview' + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=multiview' + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=multiview' + content_protect_b + '">ics</a></div></div>' + "\n"
 
     if ( argv.free ) {
-      body += '<p><span class="tooltip">Free games only<span class="tooltiptext">Only includes games marked as free. Blackouts still apply. Channels/games subject to blackout will be omitted by default.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=free' + content_protect_b + '">m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=free' + content_protect_b + '">xml</a> and <a href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=free' + content_protect_b + '">ics</a></p>' + "\n"
+      body += '<div class="channelRow"><div>' + channelInfo('Free games only', 'freeGames') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeTeams=free' + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=free' + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=free' + content_protect_b + '">ics</a></div></div>' + "\n"
     }
 
-    body += '<p><span class="tooltip">Include affiliates by org<span class="tooltiptext">Including an organization (by MLB team abbreviation, in a comma-separated list if more than 1) will include all of its affiliate broadcasts, or if that affiliate is not broadcasting the game, it will include the opponent\'s broadcast if available. If this option is not specified, but favorite team(s) have been provided, affiliate games for those organizations will be included anyway.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeOrgs=ath,atl' + content_protect_b + '">m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeOrgs=ath' + content_protect_b + '">xml</a> and <a href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeOrgs=ath' + content_protect_b + '">ics</a></p>' + "\n"
+    body += '<div class="channelRow"><div>' + channelInfo('Include affiliates by org', 'includeOrgs') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeOrgs=ath,atl' + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeOrgs=ath' + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeOrgs=ath' + content_protect_b + '">ics</a></div></div>' + "\n"
 
-    body += '<p><span class="tooltip">Include by level<span class="tooltiptext">Including a level (AAA, AA, A+ encoded as A%2B, or A, in a comma-separated list if more than 1) will include all of its broadcasts, and exclude all other levels.</span></span>: <a href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeLevels=a%2B,aaa' + content_protect_b + '">m3u</a> and <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeLevels=a%2B,aaa' + content_protect_b + '">xml</a> and <a href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeLevels=a%2B,aaa' + content_protect_b + '">ics</a></p>' + "\n"
+    body += '<div class="channelRow"><div>' + channelInfo('Include by level', 'includeLevels') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/channels.m3u?mediaType=' + mediaType + '&resolution=' + resolution + '&includeLevels=a%2B,aaa' + content_protect_b + '">m3u</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeLevels=a%2B,aaa' + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeLevels=a%2B,aaa' + content_protect_b + '">ics</a></div></div>' + "\n"
 
-    body += '<p><span class="tooltip">Include teams in titles<span class="tooltiptext">An optional parameter added to the URL will include team names in the ICS/XML titles. A value of "channels" will format the titles in the style of the <a href="https://community.getchannels.com/t/mlb-tv-for-channels/27492">legacy Channels container</a>.</span></span>: <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&includeTeamsInTitles=true' + content_protect_b + '">guide.xml</a> or <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&includeTeamsInTitles=channels' + content_protect_b + '">legacy</a>, and <a href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&includeTeamsInTitles=true' + content_protect_b + '">calendar.ics</a></p>' + "\n"
+    body += '<div class="channelRow"><div>' + channelInfo('Include teams in titles', 'includeTeamsInTitles') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&includeTeamsInTitles=true' + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&includeTeamsInTitles=channels' + content_protect_b + '">legacy</a><a class="channelLink" href="' + http_root + '/calendar.ics?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&includeTeamsInTitles=true' + content_protect_b + '">ics</a></div></div>' + "\n"
 
-    body += '<p><span class="tooltip">Create Off Air events between games<span class="tooltiptext">An optional parameter added to the URL will create "Off Air" events in the XML guide, listing the time of the next game on that channel. A value of "channels" will format the events in the style of the <a href="https://community.getchannels.com/t/mlb-tv-for-channels/27492">legacy Channels container</a>.</span></span>: <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&offAir=true' + content_protect_b + '">guide.xml</a> or <a href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&offAir=channels' + content_protect_b + '">legacy</a></p>' + "\n"
+    body += '<div class="channelRow"><div>' + channelInfo('Create Off Air events between games', 'offAir') + '</div><div class="channelLinks"><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&offAir=true' + content_protect_b + '">xml</a><a class="channelLink" href="' + http_root + '/guide.xml?mediaType=' + mediaType + '&includeTeams=' + include_teams + '&offAir=channels' + content_protect_b + '">legacy</a></div></div>' + "\n"
+    body += '</div></div>' + "\n"
 
-    body += '</td></tr></table><br/>' + "\n"
-
-    body += '<table><tr><td>' + "\n"
-    body += '<p><span class="tooltip">Example links<span class="tooltiptext">Some examples how to generate predictable links.</span></span>:</p>' + "\n"
-    body += '<p>' + "\n"
+    body += '<div class="menuContainer"><div class="cardMenuHeader">Example links</div><div class="menuContent">'
     let example_types = [ ['embed.html', 'Embed'], ['stream.m3u8', 'Stream'], ['chromecast.html', 'Chromecast'], ['kodi.strm', 'Kodi'] ]
 
     let example_team = 'ath'
@@ -2743,10 +3287,19 @@ app.get('/', async function(req, res) {
         }
       }
     }
-    body += '</p>' + "\n"
 
     include_teams = 'ath,atl'
-    body += '<p><span class="tooltip">Game Changer by team examples<span class="tooltiptext">Game Changer supports specifying certain teams to include or exclude. Useful for following a group of teams.</span></span>:</p>' + "\n"
+    body += `<br>
+      <div class="is-flex">
+        <span>Game Changer by team examples:</span>
+        <div class="info infoPadding" data-target="#gameChangerExamplesInfo">?</div>
+      </div>
+      <div id="gameChangerExamplesInfo" class="infoContainer">
+        <div class="infoContent">
+          Game Changer supports specifying certain teams to include or exclude. Useful for following a group of teams.
+        </div>
+      </div>
+    `
     body += '<p>' + "\n"
     let gamechanger_streamURL = server + '/gamechanger.m3u8?resolution=best' + content_protect_b
     let gamechanger_types = ['in', 'ex']
@@ -2754,19 +3307,65 @@ app.get('/', async function(req, res) {
       let example_streamURL = gamechanger_streamURL + '&' + gamechanger_types[i] + 'cludeTeams=' + include_teams
       body += '&bull; ' + gamechanger_types[i] + 'clude: <a href="' + http_root + '/embed.html?src=' + encodeURIComponent(example_streamURL) + '&startFrom=' + VALID_START_FROM[1] + content_protect_b + '">Embed</a> | <a href="' + example_streamURL + '">Stream</a> | <a href="' + http_root + '/chromecast.html?src=' + encodeURIComponent(example_streamURL) + content_protect_b + '">Chromecast</a> | <a href="' + http_root + '/advanced.html?src=' + encodeURIComponent(example_streamURL) + content_protect_b + '">Advanced</a> | <a href="' + http_root + '/kodi.strm?src=' + encodeURIComponent(example_streamURL) + content_protect_b + '">Kodi</a><br/>' + "\n"
     }
+    body += '</p>' + "\n"
     
-    body += '<p><span class="tooltip">Comskip link examples<span class="tooltiptext">You can generate a <a href="https://github.com/erikkaashoek/Comskip">Comskip</a>-style file to automatically skip sections (breaks, idle time, or non-action pitches) of games you record using DVR software when watched in compatible players. For example, if you record a game from your local OTA channel using Tvheadend, you can then fetch one of these Comskip files, put it in the same directory with the same name as your recorded video file, and Kodi will automatically skip those sections while you watch the video.<br><br>Specifying the team and broadcast_start_timestamp in the URL is required! For the timestamp, use the  time your DVR software began the recording. This should be your local time in YYYY-MM-DDTHH:MM:SS format.<br><br>Specifying a skip_adjust value in the URL is recommended, to adjust for broadcast delays. This will vary across different channels and different video sources.<br><br>For the txt file format, specifying the video frame rate (fps) in the URL is also required. This will commonly be either 30, 59.94, or 60, depending on your video source.<br><br>Optionally, setting pad to "on" will generate random extra skips at the end, to help avoid timeline spoilers.</span></span>: <a href="' + http_root + '/comskip.edl?team=CHC&date=2025-10-01&pad=on&skip=pitches&skip_adjust=11&broadcast_start_timestamp=2025-10-01T14:00:00' + content_protect_a + '">comskip.edl</a> or <a href="' + http_root + '/comskip.txt?team=CHC&date=2025-10-01&pad=on&skip=pitches&skip_adjust=11&broadcast_start_timestamp=2025-10-01T14:00:00&fps=59.94' + content_protect_a + '">comskip.txt</a></p>' + "\n"
+    body += `
+      <div class="is-flex">
+        <span>Comskip link examples:</span>
+        <div class="info infoPadding" data-target="#comskipExamplesInfo">?</div>
+      </div>
+      <div id="comskipExamplesInfo" class="infoContainer">
+        <div class="infoContent">
+          You can generate a <a href="https://github.com/erikkaashoek/Comskip">Comskip</a>-style file to automatically skip sections (breaks, idle time, or non-action pitches) of games you record using DVR software when watched in compatible players. For example, if you record a game from your local OTA channel using Tvheadend, you can then fetch one of these Comskip files, put it in the same directory with the same name as your recorded video file, and Kodi will automatically skip those sections while you watch the video.<br><br>Specifying the team and broadcast_start_timestamp in the URL is required! For the timestamp, use the time your DVR software began the recording. This should be your local time in YYYY-MM-DDTHH:MM:SS format.<br><br>Specifying a skip_adjust value in the URL is recommended, to adjust for broadcast delays. This will vary across different channels and different video sources.<br><br>For the txt file format, specifying the video frame rate (fps) in the URL is also required. This will commonly be either 30, 59.94, or 60, depending on your video source.<br><br>Optionally, setting pad to "on" will generate random extra skips at the end, to help avoid timeline spoilers.
+        </div>
+      </div>
+      <p><a href="${http_root}/comskip.edl?team=CHC&date=2025-10-01&pad=on&skip=pitches&skip_adjust=11&broadcast_start_timestamp=2025-10-01T14:00:00${content_protect_a}">comskip.edl</a> or <a href="${http_root}/comskip.txt?team=CHC&date=2025-10-01&pad=on&skip=pitches&skip_adjust=11&broadcast_start_timestamp=2025-10-01T14:00:00&fps=59.94${content_protect_a}">comskip.txt</a></p>
+    `
     
-    body += '<p><span class="tooltip">MPEG-TS examples<span class="tooltiptext">Experimental feature: a MPEGTS output format where you can adjust the audio sync with a URL parameter. Useful if the radio track is a consistent number of seconds ahead or behind the video track. Use positive sync values if radio is early, or negative values if radio is late.</span></span>: <a href="' + http_root + '/stream.ts?team=' + example_team + content_protect_a + '">Stream</a> or <a href="' + http_root + '/stream.ts?team=' + example_team + '&audio_track=radio&sync=2.3' + content_protect_a + '">Stream w/ radio sync</a></p>' + "\n"
+    body += `
+      <div class="is-flex">
+        <span>MPEG-TS examples:</span>
+        <div class="info infoPadding" data-target="#mpegTsExamplesInfo">?</div>
+      </div>
+      <div id="mpegTsExamplesInfo" class="infoContainer">
+        <div class="infoContent">
+          Experimental feature: a MPEGTS output format where you can adjust the audio sync with a URL parameter. Useful if the radio track is a consistent number of seconds ahead or behind the video track. Use positive sync values if radio is early, or negative values if radio is late.
+        </div>
+      </div>
+      <p><a href="${http_root}/stream.ts?team=${example_team}${content_protect_a}">Stream</a> or <a href="${http_root}/stream.ts?team=${example_team}&audio_track=radio&sync=2.3${content_protect_a}">Stream w/ radio sync</a></p>
+    `
 
-    body += '</p></td></tr></table><br/>' + "\n"
+    body += '<br/>' + "\n"
 
-    body += '<p><span class="tooltip">Sample video<span class="tooltiptext">A sample stream. Useful for testing and troubleshooting.</span></span>: <a href="' + http_root + '/embed.html' + content_protect_a + '">Embed</a> | <a href="' + http_root + '/stream.m3u8' + content_protect_a + '">Stream</a> | <a href="' + http_root + '/chromecast.html' + content_protect_a + '">Chromecast</a> | <a href="' + http_root + '/advanced.html' + content_protect_a + '">Advanced</a></p>' + "\n"
+    body += `
+      <div class="is-flex">
+        <span>Sample video:</span>
+        <div class="info infoPadding" data-target="#sampleVideoInfo">?</div>
+      </div>
+      <div id="sampleVideoInfo" class="infoContainer">
+        <div class="infoContent">
+          A sample stream. Useful for testing and troubleshooting.
+        </div>
+      </div>
+      <p><a href="${http_root}/embed.html${content_protect_a}">Embed</a> | <a href="${http_root}/stream.m3u8${content_protect_a}">Stream</a> | <a href="${http_root}/chromecast.html${content_protect_a}">Chromecast</a> | <a href="${http_root}/advanced.html${content_protect_a}">Advanced</a></p>
+    `
 
-    body += '<p><span class="tooltip">Bookmarklets for MLB.com<span class="tooltiptext">If you watch at MLB.com, drag these bookmarklets to your bookmarks toolbar and use them to hide parts of the interface.</span></span>: <a href="javascript:(function(){let x=document.querySelector(\'#mlbtv-stats-panel\');if(x.style.display==\'none\'){x.style.display=\'initial\';}else{x.style.display=\'none\';}})();">Boxscore</a> | <a href="javascript:(function(){let x=document.querySelector(\'.mlbtv-header-container\');if(x.style.display==\'none\'){let y=document.querySelector(\'.mlbtv-players-container\');y.style.display=\'none\';x.style.display=\'initial\';setTimeout(function(){y.style.display=\'initial\';},15);}else{x.style.display=\'none\';}})();">Scoreboard</a> | <a href="javascript:(function(){let x=document.querySelector(\'.mlbtv-container--footer\');if(x.style.display==\'none\'){let y=document.querySelector(\'.mlbtv-players-container\');y.style.display=\'none\';x.style.display=\'initial\';setTimeout(function(){y.style.display=\'initial\';},15);}else{x.style.display=\'none\';}})();">Linescore</a> | <a href="javascript:(function(){let x=document.querySelector(\'#mlbtv-stats-panel\');if(x.style.display==\'none\'){x.style.display=\'initial\';}else{x.style.display=\'none\';}x=document.querySelector(\'.mlbtv-header-container\');if(x.style.display==\'none\'){x.style.display=\'initial\';}else{x.style.display=\'none\';}x=document.querySelector(\'.mlbtv-container--footer\');if(x.style.display==\'none\'){let y=document.querySelector(\'.mlbtv-players-container\');y.style.display=\'none\';x.style.display=\'initial\';setTimeout(function(){y.style.display=\'initial\';},15);}else{x.style.display=\'none\';}})();">All</a></p>' + "\n"
+    body += `
+      <div class="is-flex">
+        <span>Bookmarklets for MLB.com:</span>
+        <div class="info infoPadding" data-target="#bookmarkletsInfo">?</div>
+      </div>
+      <div id="bookmarkletsInfo" class="infoContainer">
+        <div class="infoContent">
+          If you watch at MLB.com, drag these bookmarklets to your bookmarks toolbar and use them to hide parts of the interface.
+        </div>
+      </div>
+    `
+    body += '<p><a href="javascript:(function(){let x=document.querySelector(\'#mlbtv-stats-panel\');if(x.style.display==\'none\'){x.style.display=\'initial\';}else{x.style.display=\'none\';}})();">Boxscore</a> | <a href="javascript:(function(){let x=document.querySelector(\'.mlbtv-header-container\');if(x.style.display==\'none\'){let y=document.querySelector(\'.mlbtv-players-container\');y.style.display=\'none\';x.style.display=\'initial\';setTimeout(function(){y.style.display=\'initial\';},15);}else{x.style.display=\'none\';}})();">Scoreboard</a> | <a href="javascript:(function(){let x=document.querySelector(\'.mlbtv-container--footer\');if(x.style.display==\'none\'){let y=document.querySelector(\'.mlbtv-players-container\');y.style.display=\'none\';x.style.display=\'initial\';setTimeout(function(){y.style.display=\'initial\';},15);}else{x.style.display=\'none\';}})();">Linescore</a> | <a href="javascript:(function(){let x=document.querySelector(\'#mlbtv-stats-panel\');if(x.style.display==\'none\'){x.style.display=\'initial\';}else{x.style.display=\'none\';}x=document.querySelector(\'.mlbtv-header-container\');if(x.style.display==\'none\'){x.style.display=\'initial\';}else{x.style.display=\'none\';}x=document.querySelector(\'.mlbtv-container--footer\');if(x.style.display==\'none\'){let y=document.querySelector(\'.mlbtv-players-container\');y.style.display=\'none\';x.style.display=\'initial\';setTimeout(function(){y.style.display=\'initial\';},15);}else{x.style.display=\'none\';}})();">All</a></p>' + "\n"
 
     // Print version
     body += '<p class="tinytext">Version ' + version + ' (<a href="' + http_root + '/clearcache">clear session and cache</a>)</p>' + "\n"
+    body += '</div></div></div>'
 
     // Datepicker functions
     body += '<script>var datePicker=document.getElementById("gameDate");function changeDate(e){date=datePicker.value;reload()}function removeDate(e){datePicker.removeEventListener("change",changeDate,false);datePicker.addEventListener("blur",changeDate,false);if(e.keyCode===13){date=datePicker.value;reload()}}datePicker.addEventListener("change",changeDate,false);datePicker.addEventListener("keypress",removeDate,false)</script>' + "\n"
@@ -2776,6 +3375,33 @@ app.get('/', async function(req, res) {
 
     // Highlights modal functions
     body += `<script type="text/javascript">
+    `
+    // Highlights modal positioning
+    body += `var pageScrollY = 0;
+
+    function openModal() {
+      pageScrollY = window.scrollY || document.documentElement.scrollTop;
+      document.body.style.position = "fixed";
+      document.body.style.top = "-" + pageScrollY + "px";
+      document.body.style.left = "0";
+      document.body.style.right = "0";
+      document.body.style.width = "100%";
+      document.body.style.overflow = "hidden";
+      modal.style.display = "flex";
+    }
+
+    function closeModal() {
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.left = "";
+      document.body.style.right = "";
+      document.body.style.width = "";
+      document.body.style.overflow = "";
+      window.scrollTo(0, pageScrollY);
+      modal.style.display = "none";
+    }
+      `
+  body += `
 var modal = document.getElementById("myModal");
 var highlightsModal = document.getElementById("highlights");
 var span = document.getElementsByClassName("close")[0];
@@ -2807,7 +3433,7 @@ function parsehighlightsresponse(responsetext) {
     }
     modaltext += "</ul>";
     highlightsModal.innerHTML = modaltext;
-    modal.style.display = "block"
+    openModal();
   } catch (e) {
     alert("Error processing highlights: " + e.message)
   }
@@ -2816,12 +3442,77 @@ function showhighlights(gamePk, gameDate) {
   makeGETRequest("` + http_root + `/highlights?gamePk=" + gamePk + "&gameDate=" + gameDate + "` + content_protect_b + `", parsehighlightsresponse);
   return false
 }
-span.onclick = function() {
-  modal.style.display = "none";
-}
-`
+span.onclick = closeModal;`
 
-    body += 'window.onclick = function(event) { if (event.target == modal) { modal.style.display = "none"; } }</script>' + "\n"
+    body += 'window.onclick = function(event) { if (event.target == modal) {closeModal()} }</script>' + "\n"
+
+    // Find recaps and condensed games from highlights
+    body += `<script type="text/javascript">
+
+    function parseHighlight(responsetext, keyword) {
+      try {
+        var highlights = JSON.parse(responsetext);
+        var captions_parameter = '';
+        if (captions == 'disabled') {
+          captions_parameter = '&captions=disabled';
+        }
+        var highlightExists = null;
+        var hls_url = '';
+        var mp4_url = '';
+        if (highlights && (highlights.length > 0)) {
+
+          for (var i = 0; i < highlights.length; i++) {
+            var keywordsAll = highlights[i].keywordsAll || [];
+
+            var hasKeyword = keywordsAll.some(function(item) {
+              return item && (item.value && item.value === keyword)
+                });
+            if (highlights[i].headline && hasKeyword) {
+              highlightExists = highlights[i];
+              for (var j = 0; j < highlights[i].playbacks.length; j++) {
+                if (highlights[i].playbacks[j].name === 'HTTP_CLOUD_WIRED_60') {
+                  hls_url = highlights[i].playbacks[j].url;
+                } else if (highlights[i].playbacks[j].name === 'mp4Avc') {
+                  mp4_url = highlights[i].playbacks[j].url;
+                }
+              }
+              break;
+            }
+          }
+            if (!highlightExists || !hls_url) {
+      toast();
+      return;
+    } { window.location.href = "` + link + `?highlight_src=" + encodeURIComponent(hls_url) + "&resolution=" + resolution + captions_parameter + "` + content_protect_b + `"; }
+
+
+        }
+      } catch (e) {
+       
+        {toast()}
+      }
+    }
+
+    function showHighlightByKeyword(gamePk, gameDate, keyword) {
+      makeGETRequest(
+        "` + http_root + `/highlights?gamePk=" + gamePk + "&gameDate=" + gameDate + "` + content_protect_b + `",
+        function(response) {
+          parseHighlight(response, keyword);
+        }
+      );
+      return false;
+    }
+
+    function showcondensed(gamePk, gameDate) {
+        return showHighlightByKeyword(gamePk, gameDate, 'MLBCOM_CONDENSED_GAME');
+      }
+
+      function showrecap(gamePk, gameDate) {
+        return showHighlightByKeyword(gamePk, gameDate, 'MLBCOM_GAME_RECAP');
+    }
+
+        </script>`
+body +=`</div>`
+    body += '<div id="snackbar">Not yet available. Come back later.</div>'
 
     body += "</body></html>"
 
@@ -3331,6 +4022,7 @@ app.get('/highlights', async function(req, res) {
     if ( req.query.gamePk && req.query.gameDate ) {
       highlightsData = await session.getHighlightsData(req.query.gamePk, req.query.gameDate)
     }
+    res.writeHead(200, {'Content-Type': 'application/json; charset=utf-8'});
     res.end(JSON.stringify(highlightsData))
   } catch (e) {
     session.log('highlights request error : ' + e.message)
