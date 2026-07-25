@@ -2488,6 +2488,13 @@ document.addEventListener("DOMContentLoaded", function () {
         let blackoutToolTipVis = 'is-invisible'
         let blackoutType = ''
         let blackoutExpiry = ''
+        // Unwatchability is a property of a FEED, not of a game: a single-team
+        // package makes the opposing team's RSN permanently non-entitled, so
+        // nearly every game has one unusable feed while still being watchable
+        // on the other. Count both so the card-level badge/background can be
+        // reserved for games with no watchable feed at all.
+        let tvFeedTotal = 0
+        let tvFeedBlocked = 0
         
         let scheduleDesc = ''
         let gameNo = ''
@@ -2715,14 +2722,18 @@ document.addEventListener("DOMContentLoaded", function () {
                         '</span>'
                     }
 
-                    if ( blackouts[gamePk] && blackouts[gamePk].blackout_feeds && blackouts[gamePk].blackout_feeds.includes(broadcast.mediaId) ) {
-                      blackoutVis = '' 
+                    // Does THIS feed play? Decided per feed; the card-level badge
+                    // is settled after the loop, once every feed has been seen.
+                    let feedUnavailable = !!(blackouts[gamePk] && blackouts[gamePk].blackout_feeds && blackouts[gamePk].blackout_feeds.includes(broadcast.mediaId))
+                    tvFeedTotal++
+                    if ( feedUnavailable ) {
+                      tvFeedBlocked++
                       blackoutType = blackouts[gamePk].blackout_type
 
-                      if ( blackoutType != 'Not entitled' ) {
+                      if ( (blackoutType != 'Not entitled') && blackouts[gamePk].blackoutExpiry ) {
                       blackoutToolTipVis = ''
-                      blackoutExpiry = blackouts[gamePk].blackoutExpiry.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) 
-                       // officially ~90 minutes, but more likely ~150 minutes or ~2.5 hours after the game ends  
+                      blackoutExpiry = blackouts[gamePk].blackoutExpiry.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true })
+                       // officially ~90 minutes, but more likely ~150 minutes or ~2.5 hours after the game ends
                       }
                     }
 
@@ -2777,7 +2788,13 @@ document.addEventListener("DOMContentLoaded", function () {
                         multiviewquerystring += content_protect_b
                         stationlink = '<a class="streamAction" href="' + thislink + querystring + '">' + station + '</a>'
 
-                        let streamStationHtml = stationlink + prePostIndicator
+                        // A feed going live does not make it watchable — without
+                        // this, an unentitled station renders as a working link
+                        // the moment its game starts, while the not-yet-live
+                        // branch below has always greyed it out correctly.
+                        let streamStationHtml = feedUnavailable
+                          ? '<span class="streamAction streamActionInactive blackoutstation">' + station + '</span>' + prePostIndicator
+                          : stationlink + prePostIndicator
                         let resumeStreamSuffix = ''
                         // For suspended games that are currently live, mark whether this feed is part 1 or part 2.
                         if ( resumeStatus == 'live' ) {
@@ -2791,7 +2808,7 @@ document.addEventListener("DOMContentLoaded", function () {
                       if (broadcast.homeAway == 'home') {
                         streamSource.homeTV += '<span>'
 
-                        if ( mediaTypeTV == 'MLBTV' ) {
+                        if ( mediaTypeTV == 'MLBTV' && !feedUnavailable ) {
                           streamSource.homeTV +=
                             '<input type="checkbox" value="http://127.0.0.1:' +
                             session.data.port +
@@ -2813,7 +2830,7 @@ document.addEventListener("DOMContentLoaded", function () {
                       } else if (broadcast.homeAway == 'away') {
                         streamSource.awayTV += '<span>'
 
-                        if ( mediaTypeTV == 'MLBTV' ) {
+                        if ( mediaTypeTV == 'MLBTV' && !feedUnavailable ) {
                           streamSource.awayTV +=
                             '<input type="checkbox" value="http://127.0.0.1:' +
                             session.data.port +
@@ -2842,9 +2859,8 @@ document.addEventListener("DOMContentLoaded", function () {
                     } else {
                       let inactiveStation = station
 
-                      if ( blackouts[gamePk] && blackouts[gamePk].blackout_feeds && blackouts[gamePk].blackout_feeds.includes(broadcast.mediaId) ) {
+                      if ( feedUnavailable ) {
                         inactiveStation = '<span class="streamAction streamActionInactive blackoutstation">' + station + '</span>' + prePostIndicator
-                        backgroundCSS = 'backgroundBlackout'
                       } else {
                         inactiveStation = '<span class="streamAction streamActionInactive">' + station + '</span>' + prePostIndicator
                       }
@@ -2864,6 +2880,15 @@ document.addEventListener("DOMContentLoaded", function () {
                   }
                 }
               }
+            }
+
+            // Every feed has now been seen. The BLACKOUT badge and the blackout
+            // card background describe the whole card, so only claim them when
+            // no feed is watchable; otherwise the struck-through station is the
+            // honest signal and the card stays unmarked.
+            if ( (tvFeedTotal > 0) && (tvFeedBlocked == tvFeedTotal) ) {
+              blackoutVis = ''
+              backgroundCSS = 'backgroundBlackout'
             }
 
             if (mediaTypeTV == 'MLBTV' && game_started) {
