@@ -2946,9 +2946,25 @@ class sessionClass {
                                 blackoutNote = station ? ('National broadcast — watch on ' + station) : 'National broadcast (not on MLB.TV)'
                               } else {
                                 subtitle = '[BLACKOUT] ' + subtitle
-                                blackoutNote = 'Video blackout until approx. 2.5 hours after the game'
-                                const expiry = await this.get_blackout_expiry(cache_data.dates[i].games[j])
-                                if ( expiry ) blackoutNote += ' (~' + expiry.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + ')'
+                                // Why THIS feed is unwatchable is per-feed, not
+                                // per-game: a non-entitled RSN never becomes
+                                // available, so promising a lift time would be a
+                                // lie. Only a true blackout of a feed we are
+                                // entitled to earns the ~2.5 hour note. (The
+                                // per-game blackout_type can't answer this — it is
+                                // last-writer-wins across feeds.)
+                                // NB: do not reference `gamePk` here — a later
+                                // `const gamePk` in this block (UID/SEQUENCE) puts
+                                // the name in its temporal dead zone.
+                                let blackoutGamePk = cache_data.dates[i].games[j].gamePk.toString()
+                                let blackoutFeedTypes = blackouts[blackoutGamePk] && blackouts[blackoutGamePk].blackout_feed_types
+                                if ( blackoutFeedTypes && (blackoutFeedTypes[broadcast.mediaId] == 'Not entitled') ) {
+                                  blackoutNote = 'Not available on MLB.TV in your market'
+                                } else {
+                                  blackoutNote = 'Video blackout until approx. 2.5 hours after the game'
+                                  const expiry = await this.get_blackout_expiry(cache_data.dates[i].games[j])
+                                  if ( expiry ) blackoutNote += ' (~' + expiry.toLocaleString('en-US', { hour: 'numeric', minute: 'numeric', hour12: true }) + ')'
+                                }
                                 if ( station ) blackoutNote += ': ' + station
                               }
                             }
@@ -4531,6 +4547,13 @@ class sessionClass {
         }
         
         let blackout_feeds = []
+        // blackout_type below is a single per-game value, so when a game mixes
+        // reasons (an RSN we hold no entitlement to alongside a feed we do hold
+        // but which is blacked out) the last feed wins and the reason for any
+        // one feed is unrecoverable. Record it per feed as well; callers that
+        // report to the user (calendar.ics) need to tell "never available" apart
+        // from "lifts ~2.5 hours after the game".
+        let blackout_feed_types = {}
         for (var j = 0; j < feedTypes.length; j++) {
           let feedType = feedTypes[j]
           for (var k = 0; k < game[feedType].length; k++) {
@@ -4540,8 +4563,10 @@ class sessionClass {
               if ( !feed['entitled'] ) {
                 this.debuglog('get_blackout_games found non-entitled feed ' + feed.callLetters)
                 blackout_type = 'Not entitled'
+                blackout_feed_types[feed['mediaId']] = 'Not entitled'
               } else {
                 this.debuglog('get_blackout_games found blackout feed ' + feed.callLetters)
+                blackout_feed_types[feed['mediaId']] = 'Blackout'
               }
             }
           }
@@ -4550,7 +4575,8 @@ class sessionClass {
           if ( !blackouts[game_pk] ) {
             blackouts[game_pk] = { blackout_type: blackout_type }
           }
-          blackouts[game_pk].blackout_feeds = blackout_feeds   
+          blackouts[game_pk].blackout_feeds = blackout_feeds
+          blackouts[game_pk].blackout_feed_types = blackout_feed_types
         }
         
         // add blackout expiry, if requested
