@@ -1715,7 +1715,7 @@ app.get('/', async function(req, res) {
       content_protect_b = '&content_protect=' + content_protect
     }
 
-    var body = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="Content-type" content="text/html;charset=UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no"><title>' + appname + '</title><link rel="icon" href="favicon.svg' + content_protect_a + '"><link rel="stylesheet" href="/style.css' + content_protect_a + '">'
+    var body = '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="Content-type" content="text/html;charset=UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no"><title>' + appname + '</title><link rel="icon" href="' + http_root + '/favicon.svg' + content_protect_a + '"><link rel="stylesheet" href="' + http_root + '/style.css' + content_protect_a + '">'
 
     body += '<script type="text/javascript">' + "\n";
 
